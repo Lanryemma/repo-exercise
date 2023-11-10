@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>CSS PRACTICE EXAMPLE</title>
+        <style>
+            body{
+                font-family: 'Trebuchet MS';
+            }
+            .text{
+                width: 300px;
+                border: 2px solid brown;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;/*or clip*/
+            }
+            .text:hover{
+                overflow: visible;
+            }
+            .vertical-text{
+                writing-mode: vertical-lr;
+            }
+            .wrap{
+                word-wrap: break-word;
+            }
+            .shadow > h2{
+                text-shadow: 0 0 35px white, 
+                0 0 55px white,0 0 75px yellow, 
+                0 0 95px yellow,
+                0 0 115px yellow;
+                /*1 = x-coordinate
+                  2 = y-coordinate
+                  3 = blur radius
+                  4 = shadow color
+                */
+                background-color: black;
+                padding: 70px;
+            }
+        </style>
+    </head>
+    <body>
+       <!--this part is for text effect--> 
+       <div>
+        <h3>Ellipsis property</h3>
+        <p class="text">Once upon a time in a quaint village nestled between rolling hills,<br> 
+            there lived a young boy named Lucas. Lucas was known throughout the village for his<br> 
+            vivid imagination and boundless curiosity. Every day, he embarked on new adventures,<br>
+            whether in the meadows, the forest, or the nearby river.</p>
+       </div>
+       <!--Vertical allignment text effect-->
+       <div>
+        <h3>Vertical text property</h3>
+        <p class="vertical-text">12-15 items</p>
+        <p>That they rotate seasonally</p>
+       </div>
+       <!--breakword text effect-->
+       <div>
+        <h3>Break-word text property</h3>
+        <p class="wrap"> Every day, he embarked on new adventures,
+            whether in the meadows, the forest, or the nearby river.</p>
+       </div>
+
+       <!--text shodow effect-->
+       <div class="shadow">
+        <h2>This is the text shadow effect</h2>
+       </div>
+    </body>
+</html>

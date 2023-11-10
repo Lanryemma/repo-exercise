@@ -1,0 +1,104 @@
+/*::first-letter = this is to style only the first letter*/
+li::first-letter { 
+
+    color:coral; 
+    
+    font-size: 1.3em; 
+    
+    font-weight: bold; 
+    
+    line-height: 1; 
+    
+} 
+
+/*::first-line
+First-line will change the complete first line */
+ul{
+    list-style-type: none;
+}
+
+li::first-line {
+    color: lightseagreen;
+    text-decoration: underline;
+    line-height: 1;
+}
+
+/*::selection
+it allows you to highlight specific text
+The effect of it becomes obvious only after the user selects content.*/
+ li::selection {
+    color:brown;
+    background-color: antiquewhite;
+    line-height: 1;
+}
+
+/*::marker  
+Markers are typically used to add style elements to a list, 
+for instance, to color bullet points. */
+li::marker {
+    color: cornflowerblue;
+    content: ' >>';
+    font-size: 1.1em;
+}
+
+/*::before and ::after
+They allow you to add content before and 
+after an element on which they are allowed. */
+#tips::before{
+    background: darkkhaki;
+    color:darkslategray;
+    content: "Tip:";
+    padding-left: 5px;
+    padding-right: 5px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    border-radius: 4px;
+}
+
+#tips::after{
+    background:darkkhaki;
+    color:darkslategray;
+    content: "!!";
+    padding-right: 5px;
+    padding-left: 5px;
+    border-radius: 5px;
+}
+
+/*Links by default*/
+a:link{
+    color: blue;
+}
+
+/*links that have already been visited*/
+a:visited{
+    color: blueviolet;
+}
+
+/*the change in color of links when you hover over them*/
+a:hover{
+    color: darkturquoise;
+}
+
+a:active{
+    color: gold;
+}
+
+.text{
+    border: 2px black;
+    padding: 12px;
+}
+
+.text:hover{
+    box-shadow: 10px 5px 30px;
+}
+
+input:disabled {
+    background-color: #f0f0f0;
+    color: #888888;
+    cursor: not-allowed;
+}
+
+input:invalid {
+    border: 2px solid red;
+    background-color: #ffeeee;
+}  

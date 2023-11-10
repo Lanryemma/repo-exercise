@@ -1,0 +1,87 @@
+.img-class{
+    background-image:url(Falafel.jpeg);
+    background-size: cover;
+    width: auto;
+    height: 320px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.img-class > h3{
+    text-align: center;
+    padding: 15px;
+    background-color:white;
+    border-radius: 5px;
+    height: 20px;
+    color: rgb(165, 81, 22);
+}
+
+.video-class {
+    /* Telling our absolute positioned video to 
+    be relative to this element */
+    position: relative;
+  
+    width: auto;
+    height: 200px;
+    /* Will not allow the video to overflow the 
+  container */
+  overflow: hidden;
+
+  /* Centering the container's content vertically 
+  and horizontally */
+  text-align: center;
+  display: flex;
+  align-items:center;
+  justify-content: center;
+  border-radius: 10px;
+  display: flex;
+  margin-bottom: 20px;
+  flex-direction: column;
+}
+
+.video-class > video {
+    /** Simulationg background-size: cover */
+    object-fit: cover;
+    height: 100%;
+    width: 100%;
+  
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+.video-class .vid-text {
+    text-align: center;
+    background-color:white;
+    padding-right: 15px;
+    padding-left: 15px;
+    border-radius: 5px;
+    color: rgb(165, 81, 22);
+    position: relative;
+    justify-content: center;
+    margin: 10px;
+    flex-wrap: wrap;
+  }
+
+.video-class .vid-enter{
+    text-align: center;
+    color:white;
+    padding-right: 15px;
+    padding-left: 15px;
+    position: relative;
+    justify-content: center;
+    margin: 10px;
+    flex-wrap: wrap;
+}
+
+.video-class .vid-button{
+    text-align: center;
+    color:white;
+    padding-right: 15px;
+    padding-left: 15px;
+    position: relative;
+    justify-content: center;
+    margin: 10px;
+    flex-wrap: wrap;
+}

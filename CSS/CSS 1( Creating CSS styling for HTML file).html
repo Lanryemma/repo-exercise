@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>CSS PRACTICE EXAMPLE</title>
+        <link rel="stylesheet" href="CSS 1.css"/>
+    </head>
+    <body>
+        <h1>Chapter One</h1>
+        <p>This part is for<br> chapter one</p>
+        <!--The example below shows that incase you want to style one of the header 1 differently 
+            (h1 and p are examples of element selector)-->
+        <h1 id="header2">Chapter Two</h1>
+        <p>This part is for chapter two</p>
+        <h1>Chapter Three</h1>
+        <p>This part is for chapter three</p>
+        <!--There are different types of selectors(the seconfd example is also an idle selector) -->
+        <span id="latest"> NEW!<br></span>
+        <!--This example below is a class selector-->
+        <a class="navigation">Go Back</a>
+        <p class="navigation">Go Forward</p>
+        <!--This next example is the element with class selector-->
+        <p class="introduction">Go home</p>
+        <!--This next example is the decendant selector also know as <div> tag-->
+            <div id="blog">
+                <h1>Latest News</h1>
+                <div>
+                  <h1>Today's Weather</h1>
+                  <p>The weather will be sunny</p>
+                </div>
+                <p>Subscribe for more news</p>
+            </div>
+                <div>
+                    <h1>Archives</h1>
+                </div>
+        <!--This next example is the Child selector 
+        (also a type of decendant selector but it specifies the <div> tag)
+        This will select the element with the ID blog (the parent), 
+        then it will select all h1 elements that are contained directly in that element (the children). 
+        The structure of the child selector is a CSS selector 
+        followed by the child combinator symbol > followed by another CSS selector-->
+                <div id="blog1">
+                    <h1>Latest News1</h1>
+                    <div id="blog2">
+                      <h1>Today's Weather1</h1>
+                      <p>The weather will be sunny1</p>
+                    </div>
+                    <h1>balling News1</h1>
+                    <p>Subscribe for more news1</p>
+                </div>
+        <!--This next example is the hover pseudo-class.
+            The simplest example of this is changing the color of a hyperlink when it is hovered over. 
+            To do this, you add the :hover pseudo-class to the end of the selector. In the following example, 
+            adding :hover  to the a element will change the color of the hyperlink to orange when it is hovered over.
+            The css code will look like this a:hover {
+                                                         color: orange;
+                                                        }-->
+
+    </body>
+</html>

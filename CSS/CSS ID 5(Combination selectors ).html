@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>combination selectors</title>
+        <style>
+            *{
+                list-style: none;
+            }
+            body{
+                background-color: aquamarine;
+                font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+                color: black;
+            }
+            /*now we try using the general sibling selector*/
+            div ~ ul{
+                background-color: rgb(238, 233, 236);
+                padding: 10px;
+                box-shadow: inset 1px 1px 3px gray;
+                color: darkblue;
+            }
+            /*now we use the adjacent sibling selector*/
+            img + p{
+                color: brown;
+                padding-left: 60px;
+                padding-bottom: 30px;
+                font-size: small;
+                font-family: cursive;
+            }
+        </style>
+    </head>
+    <body>
+        <img src="food 1.jpg" style="width: 150px;" >
+        <div>About</div>
+        <p><b>Basic Info about little</b></p>
+        <ul>
+            <li>Based in Chicago, come visit us</li>
+            <li>Based in New York, come visit us</li>
+            <li>Based in Miami, come visit us</li>
+        </ul>
+        <p><b>Info about Owners</b></p>
+        <div>About</div>
+        <ul>
+            <li>The head in Chicago, came to visit us</li>
+            <li>The head in New York, came to visit us</li>
+            <li>The head in Miami, came to visit us</li>
+        </ul>
+
+        <img src="Pasta Salad.jpeg" style="width: 150px;" style="height: 160px;" >
+        <p>This is our new Pasta</p>
+    </body>
+</html>

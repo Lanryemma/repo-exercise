@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- if you plan on sharing the webpage on social media 
+              the meta tags bellow are important-->
+        <!--since we are building this social media card for little lemon website-->
+        <meta property="og:title" content="Our Menu">
+        <meta property="og:type" content="website">
+        <meta property="og:image" content="litlle lemon.png">
+        <meta property="og:url" content="http://LittleLemon">
+        <meta property="og:description" content="Little lemon is a family owned restaurant that have a wild variety of meals to match your taste">
+        <meta property="og:locale" content="en_US">
+        <meta property="og:site_name" content="Little Lemon"><!--this is where the link display the name of 
+            the wesite after the title-->
+
+        <!--This is where you link your css file-->
+        <link rel="stylesheet" href="Meta CSS Example.css">
+    </head>
+    <body>
+        <header>
+            <!--This is where you add your website name and logo-->
+        </header>
+        <nav>
+            <!--Add your website navigation list here-->
+        </nav>
+        <main>
+            <!--Add the main content of your website here-->
+            <!--In this example we are going to add audio and video to the webpage-->
+            <!--We will use the 'loop'element to make the audio and video to play on repeat
+                and use the control element to giveit controls like pause, play, rewind e.t.c-->
+            <!--We could also use the 'autoplay' element to make the video or audio start playing 
+                immediate the webpage opens-->
+            <h2>Play and watch to learn more about us</h2>
+            <p>Little lemon is a family friendly restaurant that delivers<br> some of the best meals you have ever tasted</p>
+            <div>
+                <audio loop controls>
+                    <source src="Music.MP3.mp3" type="audio/mp3">
+                </audio>
+            </div>
+            <!--Now we add the video and use the 'width' and 'height' elements to control its size
+                and we use the 'muted' element to make sur ethe video is muted by default when you open the webpage-->
+            <div>
+                <video width="340" height="260" loop controls muted>
+                    <source src="Video.MP4.mp4" type="video/mp4">
+                </video>
+            </div>
+         <!--This part is class assignment--> 
+         <div>
+            <video width="320" height="240" controls>
+              <source src="Video.MP4.mp4" type="video/mp4">
+              <track kind="subtitles" src="english_captions.vtt" srclang="en" label="English"> 
+              <track kind="subtitles" src="spanish_captions.vtt" srclang="es" label="Spanish">
+            </video>
+          </div>
+          <div>
+            <form>
+              <label for="rating">Rate the video</label>
+              <input type="range" id="rating" name="rating" min="1" max="5" list="ratings"><br>
+              <datalist id="ratings">
+                <option value="1" label="1"></option>
+                <option value="2" label="2"></option>
+                <option value="3" label="3"></option>
+                <option value="4" label="4"></option>
+                <option value="5" label="5"></option>
+              </datalist>
+            </form>
+          </div>
+          <button type="submit">Submit Ratings</button>  
+        </main>
+        <footer>
+            <!--Add copyright notice and other footer content here-->
+            <p>Copy rights Little lemon</p>
+        
+        </footer>
+     <!--the web browser has a way to display some text "My Profile Photo" when the image fails to load. 
+            This is done using the alt attribute. -->
+     <!--It is important to ensure that screen reader accessibility software can interpret 
+        images displayed in the web browser. To support this, the <img> tag is combined with 
+        the <figure> and <figcaption> tags to provide a description of the image. 
+        The <img> tag is added inside the <figure> tag and the <figcaption> is specified after it. -->
+            <figure> 
+                <img src="photo.png" width="320" alt="My Profile Photo"> 
+                <figcaption>A photo of myself on a beach in 2015</figcaption> 
+             </figure>
+             <blockquote><!--this is used to write quote like a blog</blockquote>-->
+    
+     <!--Include javascript files here-->
+        <script src="your js file.js"></script>
+    </body>
+</html>

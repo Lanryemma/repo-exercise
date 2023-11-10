@@ -1,0 +1,112 @@
+.box{
+    background-color: aquamarine;
+    border-radius: 5px;
+    margin: 2px;
+    padding: 10px;
+    border: 2px solid black;
+}
+
+/*  Now let's add properties to the flex container by converting it into flex. */
+.flex-container{
+    display: flex;
+}
+
+/*Alignment properties
+ Let’s examine a few alignment properties inside the flex. There are four 
+ main properties used to align a flex container and items present inside it:
+justify-content: For item alignment on main axis.
+
+align-items: For item alignment on cross axis.
+
+align-self: For unique flex items on cross axis.
+
+align-content: Used for packing flex lines and control over space.*/
+
+/*JUSTIFY-CONTENT*/
+.justify-container{
+    display: flex;
+    justify-content: center
+}
+
+/*flex-wrap:
+The default for this property is ‘nowrap’ which means 
+the items will span the entire width of the axis.*/
+.flexwrap-container{
+    display: flex;
+    justify-content: center;
+    flex-wrap:  wrap;
+}/*reduce the size of the viewport to see the effect*/
+
+/*flex-direction: 
+This property is used to set the main axis, which is a ‘row’ by default. 
+It basically means you are changing your ‘main’ axis from horizontal rows to vertical columns.*/
+.flexdirection-container{
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    flex-wrap: wrap;
+}
+
+/*align-items:
+The alignment on the cross-axis is done with the help of this property. 
+Let’s change the value for it to ‘flex-end’.*/
+.Alignitem-container{
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-items:flex-end;/*align-items:flex-start; (to align at the start)s*/
+} 
+
+/*align-self:
+This property can be used on individual items inside the flex. */
+.Alignself-container{
+    display: flex;
+    justify-content:  center;
+    flex-direction: column;
+    flex-wrap:  wrap;
+    align-items:flex-end;
+}
+.Alignself-container .box3{
+    background-color: blanchedalmond;
+    align-self: center;
+}
+
+/*gap:
+gap property can be used to create space between the items along the main axis. 
+You can also individually configure the gaps in rows and columns using row-gap 
+and column-gap properties.*/
+.gap-container{
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-items:flex-end;
+    gap:10px;
+}
+.gap-container .box3{
+    background-color: blanchedalmond;
+    align-self: center;
+}   
+
+/*The final set of properties are flex-grow, flex-shrink and flex-basis. 
+Together these determine how the flex takes up space, grows or shrinks 
+according to the space available.*/
+.flexbasis-container{
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items:flex-end;
+    gap:10px;
+}
+.flexbasis-container .box3{
+    background-color: blanchedalmond;
+    align-self: center;
+    flex: 1 1 auto;
+} /*The third box now takes up the entire free space available because 
+flex-growth’s value has been set to 1,flex-shrink to 1 and flex-basis to auto.
+flex-basis sets the initial size of the container and on auto, takes the device screen size
+And if one of the box has a flex-growth value of 1.5, that box would take up more 
+space as compared to the others*/
+

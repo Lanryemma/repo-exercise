@@ -1,0 +1,75 @@
+IFRAME
+An iframe is HTML element that allows you to place or embed content 
+from another website into a webpage. It's defined using the iframe HTML tag. 
+How it works is that it embeds another browsing instance inside the page.
+
+ALLOW
+It specifies what features or permissions are available to the frame, 
+for instance, access to the microphone, camera, other APIs and so on. For example: 
+allow="fullscreen” the fullscreen mode can be activated 
+allow=“geolocation” lets you access the user's location 
+To specify more than one feature, a semicolon-separator should be used between features.
+<iframe src="https://example.com/…" allow="camera; microphone"> </iframe> 
+
+NAME 
+The name for the <!--<iframe>-->. For example: 
+<iframe name = "My Frame" width="400" height="300"></iframe>
+
+HEIGHT
+It specifies the height of the frame. The default value is 150, in terms of CSS pixels. 
+
+WIDTH
+Specifies the width of the frame, in terms of CSS pixels. The default value is 300 pixels.
+
+REFERRERPOLICY
+A referrer is the HTTP header that lets the page know who is loading it. 
+This attribute indicates which referrer information to send when loading the frame resource. 
+The common values are: 
+* 'no-referrer': The referrer header will not be sent. 
+* 'origin': The referrer will be limited to the origin of the referring page. 
+* 'strict-origin': The origin of the document is sent as the referrer only 
+   when using the same protocol security level (HTTPS to HTTPS).
+
+SANDBOX
+To enforce greater security, a sandbox applies extra restrictions to the content in the <!--<iframe>-->.
+(permission token) is used to lift restrictions,some common token include
+'allow-downloads': Allows the user to download an item 
+'allow-forms': Allows the user to submit forms 
+'allow-modals': The resource can open modal windows 
+'allow-orientation-lock': Lets the resource lock the screen orientation 
+'allow-popups Allows': popups to open 
+'allow-presentation': Allows a presentation session to start 
+'allow-scripts': Lets the resource run scripts without creating popup windows
+<iframe src="my_iframe_sandbox.html" sandbox="allow-forms allow-scripts"> 
+</iframe>
+if (sandbox ="") that means all permisions are restricted
+
+SRC
+The URL of the page to embed in the <!--<iframe>-->. 
+Using the value about:blank would embed an empty page.
+
+srcdoc
+Let's you specify the inline HTML to embed in the <!--<iframe>-->. 
+When defined, this attribute would override the src attribute.  
+For instance, the following code will display "My inline html" 
+in the frame, instead of loading my_iframe_src.html. 
+<iframe src="my_iframe_src.html" srcdoc= "<p>My inline html</p>" > 
+</iframe> 
+
+This attribute let's you specify if the iframe should be loaded immediately when 
+the web page loads (eager) or loaded when iframe is displayed in the browser (lazy).
+<iframe src="my_iframe_src.html" loading="lazy" > 
+</iframe> 
+
+TITLE
+This attribute let's you add a description to the iframe for accessibility purposes. 
+The value of this attribute should accurately describe the iframe's content.
+<iframe src="history.html" title="An embedded document about the history of my family" > 
+</iframe> 
+
+
+<!--The little lemon restaurant wants to add an image to promote another restaurant meal
+     we use the sandbox element to prevent any javascript code from running in the background -->
+<!--We use allow attribute to disable the payment, microphone, and camera access. -->
+    <iframe src="Pasta Salad.jpeg" sandbox="" width="320" height="128" allow="payment 'none';camera 'none';microphone 'none'"> 
+    </iframe>

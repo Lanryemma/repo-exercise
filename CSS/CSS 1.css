@@ -1,0 +1,35 @@
+body {
+  background-color: #E0E0E2;
+}
+h1 {
+    color: green;
+    background-color: cyan;
+}
+#header2 {
+    color: purple;
+    background-color: khaki;
+}
+#latest {
+    color:brown;
+}
+.navigation { 
+    margin: 2px;
+  }
+  .introduction { 
+    margin: 2px;
+  }
+  #blog h1 {
+    color: blue;
+  }
+  #blog div h1 {
+    color: rgb(255, 0, 234);
+  }
+  #blog1 > h1 {
+    color: rgb(173, 62, 62);
+  }
+  #blog2 > h1 {
+    color: pink;
+  }
+  a:hover {
+    color: orange;
+  }

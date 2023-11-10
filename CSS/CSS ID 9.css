@@ -1,0 +1,105 @@
+.apple{
+    margin: 30px;
+    transform: skewX(20deg);
+    /*this will tilt the letter 
+    towards the x-axis*/
+    transition: 5s;
+}
+
+.ball{
+    margin: 100px;
+    transform: rotate(20deg);
+    /*this will rotate the letter 
+    to the right by default*/
+    transition: 5s;/*this will determine how long the transformation will take*/
+}
+
+.box{
+    display: grid;
+    width: 240px;
+    height: 240px;
+    margin: 100px;
+    background-color: green;
+    border-radius: 12px;
+    border: solid lawngreen
+}
+
+.box:hover{
+    transform: rotateZ(60deg);
+    background-color: greenyellow;
+    opacity: 50%;
+    transition: 2s;
+}
+
+.container1 {
+	min-height: 100vh;
+	background-color:bisque;
+}
+  
+.letters {
+	display: flex;
+	justify-content: center;
+	padding-top: 20px;
+	margin-bottom: 20px;
+	text-transform:uppercase;
+	font-size: 60px;
+    background-color: aqua;
+}
+
+/* Add rules for the element 'p' present inside the class 'letters' using descendant selector */
+.letters p{
+	text-align: center;
+	background-color: rgb(250, 150, 100);
+	width: 70px;
+	margin-right: 1.5px;
+	border-radius: 15%;
+	border-color: rgb(250, 125, 75);
+    border-style: solid;
+}
+
+/* Add rules for steps 8 and 9 */
+.letters p:nth-child(even):hover{
+	transform: rotateY(720deg) skew(30deg);
+	transition: 0.5s;
+}
+
+/* Add rules for steps 10 and 11 */
+.letters p:nth-child(odd):hover{
+	transform: rotateX(720deg);
+	transition: 1.5s;
+}
+
+
+/*
+transform: translate(50px, 100px);[ moves the <div> element 50 pixels to the right,
+and 100 pixels down from its current position]
+translate(), translate3d(), translateX(), translateY(), translateZ()
+transform: translate3d(10px, 20px, 30px);
+
+transform: scale(2, 3);[ncreases the <div> element to be two times of its original width, 
+and three times of its original height]
+
+transform: scaleX(2);[increases the <div> element to be two times of its original width]
+transform: scaleX(0.5);[half the size]
+transform: scaleY(3);[increases the <div> element to be three times of its original height]
+transform: scaleY(0.5);[reduce size by half]
+transform: scale3d(2, 1, 0.3);
+
+transform: skewX(20deg);[skews the <div> element 20 degrees along the X-axis]
+transform: skewY(20deg);[skews the <div> element 20 degrees along the Y-axis]
+transform: skew(20deg, 10deg);[20deg x-axis, 10deg y-axis]
+
+transform: matrix(1, -0.3, 0, 1, 0, 0);[ matrix(scaleX(), skewY(), skewX(), scaleY(), translateX(), translateY())]
+transform: matrix(1.0, 2.0, 3.0, 4.0, 5.0, 6.0);
+
+rotate3d(), rotateX(), rotateY(), rotateZ()
+transform: rotate3d(3,2,1, 100deg);
+
+[Global value types:]
+transform: inherit;
+transform: initial;
+transform: unset;
+
+[Multiple transform over the same element]
+  transform: rotate(45deg) scale(1.5) translate(45px);
+  transform-origin: 10px 10px;

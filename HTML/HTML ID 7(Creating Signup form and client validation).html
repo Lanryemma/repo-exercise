@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <!-- if you plan on sharing the webpage on social media 
+              the meta tags bellow are important-->
+        <!--since we are building this social media card for little lemon website-->
+        <meta property="og:title" content="Our Menu">
+        <meta property="og:type" content="website">
+        <meta property="og:image" content="litlle lemon.png">
+        <meta property="og:url" content="http://LittleLemon">
+        <meta property="og:description" content="Little lemon is a family owned restaurant that have a wild variety of meals to match your taste">
+        <meta property="og:locale" content="en_US">
+        <meta property="og:site_name" content="Little Lemon"><!--this is where the link display the name of 
+            the wesite after the title-->
+
+        <!--This is where you link your css file-->
+        <link rel="stylesheet" href="Meta CSS Example.css">
+    </head>
+    <body>
+        <header>
+            <!--This is where you add your website name and logo-->
+        </header>
+        <nav>
+            <!--Add your website navigation list here-->
+        </nav>
+        <main>
+            <!--Add the main content of your website here-->
+            <h1>Sign up for Little Lemon site</h1>
+            <form method="POST">
+                <div>
+                    <label for="User_first_name">First Name</label><br>
+                    <!--we use break element to make the input show below the label-->
+                    <input type="text" id="User_first_name" name="User_first_name" required> 
+                    <!--the "required" element is a lient side validation that make sufre only 
+                        what is required is inputed-->
+                </div>
+                <div>
+                    <label for="User_last_name">Last Name</label><br>
+                    <input type="text" id="User_last_name" name="User_last_name" required>
+                </div>
+                <div>
+                    <label for="User_email_address">Email Address</label><br>
+                    <input type="email" id="User_email_address" name="User_email_address" required>
+                </div>
+                <div>
+                    <label for="User_password">Password</label><br>
+                    <!--you can state the required length by using the minlength and maxlength element-->
+                    <input type="password" id="User_password" name="User_password" required minlength="5" maxlength="12">
+                </div>
+                <div>
+                    <label for="User_confirmed_password">Confirm Password</label><br>
+                    <input type="password" id="User_confirmed_password" name="User_confirmed_password" required minlength="5" maxlength="12">
+                </div>
+                <div>
+                    <button type="submit">Sign Up</button>
+                </div>
+                <!--using pseudo class css element to make the forms glow red when invalid data is entered-->
+                <style>
+                    input:focus:invalid {
+                        border : 2px solid red
+                    }
+                </style>
+                <!--This part will enable you to book tables in the little lemon website using the radio tag-->
+
+                <div>
+                    <h2>You can book your table here</h2>
+                    <fieldset id="table"><!--We use fieldset tag to seperate radio tags from each other because html will think all the radio tags in the form are thw same-->
+                        <input type="radio"  value="2" name="table"> 2-person table
+                        <input type="radio"  value="4" name="table" checked> 4-person table
+                        <!--we used the 'checked' element because we want the 4-person table to be checked by default because its usually the most booked-->
+                        <input type="radio"  value="6" name="table" > 6-person table
+                    </fieldset>
+                </div>
+                <div>
+                    <h2>You can book your table location here</h2>
+                    <fieldset id="location"><!--We use fieldset tag to seperate radio tags from each other because html will think all the radio tags in the form are thw same-->
+                        <input type="radio"  value="indoor" name="location" checked> Indoor Table
+                        <input type="radio"  value="outdoor" name="location"> Outdoor Table
+                    </fieldset>
+                </div>
+                <button type="submit">Book Table</button>
+                <div>
+                    <!--This part is to allow the customers to book restaurant lacation on the website-->
+                    <label for="booking_locate">Book The Location you want</label><br>
+                    <input  id="booking_locate" name="booking_locate" list="locations">
+                    <!--we use the datalist tag to have drop down option of location 
+                        that the customers can select from-->
+                    <datalist id="locations">
+                        <option value="Downtown"></option>
+                        <option value="Uptown"></option>
+                    </datalist>
+                </div>
+                <div>
+                    <!--This part is to allow the customers to book date on the website-->
+                    <label for="booking_date">Book The Date</label><br>
+                    <input type="date" id="booking_date" name="booking_date" required>
+                </div>
+                <div>
+                    <!--This part is to allow the customers to set the number of people on the website-->
+                    <label for="booking_people">Number of People</label><br>
+                    <input type="range" id="booking_people" name="booking_people" max="10" min="1" value="4" oninput= "this.nextElementSibling.value=this.value">
+                    <output>4</output>
+                    <!-- this output tag enables the range to display its output when being adjusted
+                    the "oninput= "this.nextElementSibling.value=this.value"" will update the value of 
+                    the output element when the value of theslider changes-->
+                </div>
+            </form>
+            <form method="POST">
+                <div>
+                  <label for="email_address">Email Address</label><br>
+                  <input type="email" id="email_address" name="email_address" required>
+                </div>
+                <div>
+                  <label for="booking_date">Book The Date</label><br>
+                  <input type="date" id="booking_date" name="booking_date" required>
+                </div>
+                <div>
+                  <label for="people">Number of People</label><br>
+                  <input type="number" id="people" name="people" max="8" min="1" required>
+                </div>
+                <div>
+                  <label for="policy">I agree to the cancellation policy</label><br>
+                  <input type="checkbox" id="policy" name="policy" required>
+                </div>
+                <button type="submit">Book Now</button>
+              </form>
+        </main>
+        <footer>
+            <!--Add copyright notice and other footer content here-->
+            <p>Copy rights Little lemon</p>
+        </footer>
+
+        <!--Include javascript files here-->
+        <script src="your js file.js"></script>
+    </body>
+</html>

@@ -1,0 +1,122 @@
+/*[from{} and to{} keywords and using percentages(%) syntax]
+@keyframes animation-name { 
+
+from { 
+property-a: value-a; 
+} 
+
+to { 
+property-a: value-b; 
+} 
+
+} 
+-------------------------------------------------------------------------------
+[@keyframes allows you to add more steps to your animation by using a 
+percentage that represents the completion of the animation]
+@keyframes identifier { 
+
+0% {transform: rotate(100deg);} 
+30% {opacity: 1;} 
+50% {opacity: 0.50;} 
+70% {opacity: 1;} 
+100% {transform: rotate(50deg);} 
+}
+------------------------------------------------------------------------------------------------------
+Animation property shorthand:
+
+The animation property is a shorthand for the sub-properties with their default values:
+
+1. animation-name: none 
+2. animation-duration: 0s 
+3. animation-timing-function: ease 
+4. animation-delay: 0s 
+5. animation-iteration-count: 1 
+6. animation-direction: normal 
+7. animation-fill-mode: none 
+8. animation-play-state: running 
+9. animation-timeline: auto 
+
+Of these, the first property of the animation-name is what's used to tie it to the @keyframes rule.
+-------------------------------------------------------------------------------------------------------*/
+
+body{
+    padding: 30px;
+}
+
+.box{
+    background-color: lightcoral; 
+    width: 50px; 
+    height: 50px; 
+    animation: animationname 3s infinite ease-in-out; 
+}
+
+@keyframes animationname{ 
+
+    from{
+        width: 50px; 
+    } 
+    to{
+        width: 100px; 
+    } 
+}
+
+.box1{
+    background-color: rgb(135, 128, 240); 
+    width: 50px; 
+    height: 50px; 
+    animation: myname 3s infinite ease-in-out; 
+    margin-top: 30px;
+}
+/*To and From function using percentage*/
+@keyframes myname{
+    0%{width: 50px;
+    }
+    100%{width: 100px;
+    }
+}
+
+.box2{
+    background-color: rgb(57, 114, 10); 
+    width: 50px; 
+    height: 50px; 
+    animation: myanime 3s infinite ease-in-out; 
+    margin-top: 30px;
+}
+
+@keyframes myanime{
+    0%{width: 50px;
+    }
+    50%{background-color: aquamarine;
+        height: 20px;
+        width: 120px;
+    }
+    100%{width: 100px;
+    }
+}
+
+@keyframes bounce{
+    from{
+        transform: translate3d(0, 0, 0);
+        /*each '0' represents the X,Y nad Z-axis*/
+    }
+    to{
+        transform: translate3d(400px, 0, 0);
+    }
+}
+
+.ball{
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-top: 30px;
+    background-color: black;
+    animation: bounce 2s linear;
+    /*we use linear because we want the speed to be consistent*/
+    animation-direction: alternate;
+    /*this will play thr animation in reverse when it complated*/
+    animation-iteration-count: infinite;
+}
+
+/*[Multiple animations]
+    animation: animation-a 2s linear infinite alternate, 
+        animation-b 3s ease infinite alternate;
