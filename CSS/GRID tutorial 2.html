@@ -41,8 +41,8 @@
                 grid-template-columns: 1fr 1fr 1fr 1fr;
         /*you calso write it as  grid-template-columns: repeat(4, 1fr);*/
                 grid-area: main;
-                margin-left: 0px;
-                margin-right: 0px;
+                margin-left: 10px;
+                margin-right: 10px;
                 height: auto;
                 font-size: smaller;
             }
@@ -245,6 +245,7 @@
                 /* Add rules here */
                 grid-template-columns: 1fr;
                 grid-template-rows: repeat(7, 1fr);
+                margin: 11px;
                 }
                 .card1{
                     grid-row-start: 1;
@@ -275,6 +276,13 @@
                     grid-row-end: 7;
                     grid-column-start: 1;
                     grid-column-end: 1;
+                }
+                .card5 >.align > .image{
+                margin-left: -80px;
+                }
+
+                .card1 >.align > .image{
+                    margin-left: -80px;
                 }
             }
 
