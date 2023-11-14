@@ -142,3 +142,11 @@ background-image: repeating-radial-gradient(red, yellow 10%, green 20%);
 
 create dash effect with your border
  border: 10px dashed black;
+
+font-family: Helvetica; font-size: 14px; font-weight: bold; line-height: 1.5;
+We can condense all that into one line:
+font: bold 14px/1.5 Helvetica; 
+
+#selector { margin-top: 50px; margin-right: 0; margin-bottom: 50px; margin-left 0; }
+there is a solution, and it’s using CSS shorthand properties.
+#selector { margin: 50px 0; }
