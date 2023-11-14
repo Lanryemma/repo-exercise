@@ -84,4 +84,61 @@
     justify-content: center;
     margin: 10px;
     flex-wrap: wrap;
+    align-items: center;
 }
+
+body {
+  height: auto;
+  background-color: #cccccc;
+  background-image: linear-gradient(90deg,yellow , skyblue );
+}
+
+/*Let the first image appear only once (with no-repeat), 
+and let the second image be repeated:
+body {
+  background-image: url("img_tree.gif"), url("paper.gif");
+  background-repeat: no-repeat, repeat;
+  background-color: #cccccc;
+}
+
+Sets a linear-gradient (two colors) 
+as a background image for a <div> element:
+#grad1 {
+  height: 200px;
+  background-color: #cccccc;
+  background-image: linear-gradient(red, yellow);
+}
+
+Sets a linear-gradient (three colors) as a 
+background image for a <div> element:
+#grad1 {
+  height: 200px;
+  background-color: #cccccc;
+  background-image: linear-gradient(red 45%, yellow 30%, green25%);
+}
+
+The repeating-linear-gradient() function 
+is used to repeat linear gradients:
+#grad1 {
+  height: 200px;
+  background-color: #cccccc;
+  background-image: repeating-linear-gradient(red, yellow 10%, green 20%);
+}
+
+Sets a radial-gradient (two colors) as a 
+background image for a <div> element:
+#grad1 {
+  height: 200px;
+  background-color: #cccccc;
+  background-image: radial-gradient(red, yellow);
+}
+
+Sets a radial-gradient (three colors)
+background-image: radial-gradient(red, yellow, green);
+
+The repeating-radial-gradient() function is 
+used to repeat radial gradients:
+background-image: repeating-radial-gradient(red, yellow 10%, green 20%);
+
+create dash effect with your border
+ border: 10px dashed black;
