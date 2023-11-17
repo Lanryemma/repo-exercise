@@ -119,3 +119,12 @@ footer {
     padding: 25px;
     background-color:darkcyan;
   }
+
+ /* grid-area: 2 / 2 / 3 / 3
+  grid-area is shorthand for grid-row-start, 
+  grid-column-start, grid-row-end and grid-column-end.*/
+
+ /* grid-row:    2 / 5;
+  grid-column: 2 / 4;
+this is short hand for grid-row-start /grid-row-end
+and  grid-column-start /grid-column-end

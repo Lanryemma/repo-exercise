@@ -1,0 +1,423 @@
+*{
+    margin: 0;
+    padding: 0;
+
+}
+:root {
+    --background1: #4c6085;
+    --background2: #39a0ed;
+    --background3: #9cf600cd;
+    --background4: #20b9d4;
+}
+body{
+    
+    background-repeat: repeat;
+    background-image: url(Asset\ 9@4x.png);
+    background-size: 10%;
+    background-color: rgba(255, 255, 255, 0.9); /* Adjust the alpha value (0.0 to 1.0) for the desired opacity */
+    background-blend-mode: overlay;
+    display: grid; 
+    height: 200px; 
+    grid-template-areas: "header"
+                         "nav"
+                         "main"
+                         "footer";
+
+    grid-template-rows: auto auto auto auto; 
+}
+header { 
+    grid-area: header; 
+    background-color: transparent;
+    border-radius: 8px; 
+    display: grid;
+    justify-items: center;
+    font-family:'Trebuchet MS';
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    width: auto;
+} 
+
+nav { 
+    grid-area: nav; 
+    background: linear-gradient(to right, gold 20%, green 80%); 
+    display: grid;
+    place-items: center;
+    font-family:'Trebuchet MS';
+    padding: 20px;
+    width: auto;
+    margin-bottom: 30px;
+} 
+nav > ul{
+    display: flex;
+    list-style: none;
+    flex-wrap: wrap;
+    justify-content:space-between;
+    
+}
+nav>ul>li{
+    padding: 30px;
+}
+
+
+main { 
+    grid-area: main; 
+    background-color:transparent;
+    border-radius: 8px; 
+    display: grid;
+    font-family:'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+    padding: 20px;
+    width: auto;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    margin-bottom: 30px;
+    grid-gap: 30px;
+    margin-left: 15px;
+    margin-right: 15px;
+}
+/*justify-items/self is for row
+  and align-items/self is for column*/
+footer { 
+    grid-area: footer; 
+    background: linear-gradient(to right, gold 20%, green 80%);
+    display: flex;
+    justify-content:space-between;
+    font-family:'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+    padding: 20px;
+    width: auto;
+    flex-wrap: wrap;
+}
+h3{
+    padding: 20px;
+    display: inline-flex;
+}
+h2{
+    padding: 20px;
+    display: inline-flex;
+}
+p{
+    padding: 20px;
+    display: inline-flex; 
+}
+
+#new{
+    display: grid;
+    grid-column-start: 1;
+    grid-column-end: 4;
+    grid-row-start: 1;
+    grid-row-end: 2;
+    background-color: green;
+    width:auto;
+    height:300px;
+    border-radius: 15px;
+    box-shadow: 6px 10PX 19px;
+}
+#new:hover{
+    transform: scaleX(1.05) scaleY(1.05);
+    transition: 0.5s;
+}
+
+
+.main-1{
+    display: grid;
+    background-color: gold;
+    grid-row-start: 2;
+    grid-row-end: 3;
+    grid-column-start: 1;
+    grid-column-end: 2;
+    width:auto;
+    border-radius: 15px;
+    box-shadow: 6px 10PX 19px;
+}
+.main-1:hover{
+    transform: scaleX(1.05) scaleY(1.05);
+    transition: 0.5s;
+}
+.main-2{
+    display: grid;
+    grid-row-start: 2;
+    grid-row-end: 3;
+    grid-column-start: 2;
+    grid-column-end: 3;
+    background-color:green;
+    width:auto;
+    border-radius: 15px;
+    box-shadow: 6px 10PX 15px;
+}
+.main-2:hover{
+    transform: scaleX(1.05) scaleY(1.05);
+    transition: 0.5s;
+}
+.main-3{
+    display: grid;
+    grid-row-start: 2;
+    grid-row-end: 3;
+    grid-column-start: 3;
+    grid-column-end: 4;
+    background-color:gold;
+    width:auto;
+    border-radius: 15px;
+    box-shadow: 6px 10PX 19px;
+}
+.main-3:hover{
+    transform: scaleX(1.05) scaleY(1.05);
+    transition: 0.5s;
+}
+.image1{
+    display: grid;
+    width: auto ;
+    height: auto;
+    border-radius: 10px;
+}
+.new-child{
+    display: inline-flex;
+    line-height: 30px;
+}
+.image2{
+    display: grid;
+    width: 100% ;
+    height: auto;
+    border-top-left-radius:10px;
+    border-top-right-radius: 10px;
+}
+.image3{
+    display: grid;
+    width: 100% ;
+    height: auto;
+    border-top-left-radius:10px;
+    border-top-right-radius: 10px;
+}
+.image4{
+    display: grid;
+    width: 100% ;
+    height: auto;
+    border-top-left-radius:10px;
+    border-top-right-radius: 10px;
+}
+.home{
+    background-color: green;
+    padding: 15px;
+    border-radius: 10px;
+    color: gold;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+.menu{
+    background: gold; 
+    padding: 15px;
+    border-radius: 10px;
+    color: green;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+.others{
+    background-color: green;
+    padding: 15px;
+    border-radius: 10px;
+    color: gold;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+.contact{
+    background-color: gold;
+    padding: 15px;
+    border-radius: 10px;
+    color: green;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+.about{
+    background-color: gold;
+    padding: 15px;
+    border-radius: 10px;
+    color: green;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+.copy{
+    background-color: gold;
+    padding: 15px;
+    border-radius: 10px;
+    color: green;
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+}
+@media (max-width: 480px) {
+    main { 
+        display: grid;
+        grid-area: main; 
+        background-color: transparent;
+        border-radius: 8px; 
+        display: grid;
+        font-family:'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+        padding: 20px;
+        width: auto;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr 1fr 1fr;
+        margin-bottom: 30px;
+        justify-items:center;
+    }
+    #new{
+        height: fit-content;
+    }
+    
+    .main-1{
+        display: grid;
+        grid-row-start: 2;
+        grid-row-end: 3;
+        grid-column-start: 1;
+        grid-column-end: 2;
+        margin-right: -40px;
+    }
+    .main-2{
+        display: grid;
+        grid-row-start: 3;
+        grid-row-end: 4;
+        grid-column-start: 1;
+        grid-column-end: 2;
+        margin-right: -40px;
+    }
+
+    .main-3{
+        display: grid;
+        grid-row-start: 4;
+        grid-row-end: 5;
+        grid-column-start: 1;
+        grid-column-end: 2;
+        margin-right: -40px;
+    }
+    
+    .new-child{
+        display: flex;
+        line-height: 30px;
+        flex-wrap: wrap;
+    }
+    .image1{
+        display: grid;
+        width: 100% ;
+        height: 200px;
+        border-radius: 10px;
+    }
+    .hot{
+        margin-top: 10px !important;
+    }
+    .pasta{
+        margin-top: 10px !important;
+    }
+    .pasta-p{
+        margin-top: 10px!important;
+    }
+}
+/*This part is for animation of different elements*/
+.hot{
+    background-color: gold;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    margin-top: 40px;
+    color: green;
+    animation: pasta 2s infinite ease-in-out; 
+}
+.pasta{
+    background-color: gold;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    margin-top: 40px;
+    color: green;
+    animation: pastaa 2s infinite ease-in-out; 
+}
+.pasta-p{
+    background-color: gold;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    width: fit-content;
+    margin-top: 40px;
+    color: green;
+    margin-bottom: 10px;
+    font-size: larger;
+    animation: pasta 2s infinite ease-in-out; 
+}
+@keyframes pasta{
+    0%{transform: scaleX(0.95) scaleY(0.95);
+    }
+    100%{transform: scaleX(1.05) scaleY(1.05);;
+    }
+}
+@keyframes pastaa{
+    0%{transform: scaleX(1.05) scaleY(1.05);
+    }
+    100%{transform: scaleX(0.95) scaleY(0.95);;
+    }
+}
+
+.Calamari{
+    background-color: green;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    margin-top: 10px;
+    color: gold;
+    animation: pastaa 2s infinite ease-in-out;
+}
+.Calamari-p{
+    background-color: green;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    width: fit-content;
+    margin-top: 10px;
+    color: gold;
+    margin-bottom: 10px;
+    font-size: larger;
+    animation: pasta 2s infinite ease-in-out;
+}
+.Falafel{
+    background-color: gold;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    color: green;
+    animation: pastaa 2s infinite ease-in-out;
+}
+.Falafel-p{
+    background-color: gold;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    width: fit-content;
+    margin-top: 10px;
+    color: green;
+    margin-bottom: 10px;
+    font-size: larger;
+    animation: pasta 2s infinite ease-in-out; 
+}
+.burger{
+    background-color: green;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    color: gold;
+    animation: pastaa 2s infinite ease-in-out;
+}
+.burger-p{
+    background-color: green;
+    margin-left: 11px;
+    margin-right: 11px;
+    border-radius: 40px;
+    height: fit-content;
+    width: fit-content;
+    margin-top: 10px;
+    color: gold;
+    margin-bottom: 10px;
+    font-size: larger;
+    animation: pasta 2s infinite ease-in-out;
+}

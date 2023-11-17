@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Little Lemon</title>
+    <link rel="stylesheet" href="CSS ID 2.css">
+</head>
+<body>
+    <!--Some HTML elements (like <div>, <p>, <ul> etc.) have a default display behavior which is known as block-level.--> 
+    <!-- there are also some inline-level elements by default (like <span> or <a> tags),-->
+    <div class="container">
+        <img class="icon" src="little lemon.png" alt="sample logos" width="32px" height="26px">
+        <input type="search" class="searchbox" name="search" placeholder="Enter your search here">
+        <input type="submit" value="search" class="searchbutton">
+    </div>
+    <div>
+        <ul class="container2">
+            <li><a href="index.html">Home</a></li><br>
+            <li><a href="index.html">Other Blogs</a></li><br>
+            <li><a href="index.html">Menu</a></li><br>
+            <li><a href="index.html">Contact us</a></li><br>
+        </ul>
+    </div>
+    <div class="container3">
+        <img class="sample" src="food 1.jpg" alt="food item" width="240px" height="180">
+        <img class="sample" src="food 2.jpeg" alt="food item" width="240px" height="180">
+        <img class="sample" src="Falafel.jpeg" alt="food item" width="240px" height="180">
+        <img class="sample" src="Pasta Salad.jpeg" alt="food item" width="240px" height="180">
+        <img class="sample" src="little lemon.png" alt="food item" width="240px" height="180">
+    </div>
+    <div class="row">
+        <!--CSS provides a straightforward way to do this by using flex box, with flex boxes, 
+        you can generate both vertical and horizontal bar charts, using the flex property
+        (flex-grow,flex-shrink and flex-basis. These bar charts are called flex charts.-->
+        <div class="label">Prefered Dish </div>
+        <div class="container4">
+            <div class="dish Falafel" style="flex-basis: 35%;">35%</div>
+            <div class="dish Calamari" style="flex-basis: 45%;">45%</div>
+            <div class="dish Pasta" style="flex-basis: 20%;">20%</div>
+        </div>
+    </div>
+    
+</body>
+</html>

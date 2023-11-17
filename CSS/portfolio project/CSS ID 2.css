@@ -1,0 +1,98 @@
+.container{
+    display: inline-flex;
+    /*the inline-flex unlike the the flex layout hugs the elements inside the container*/
+    flex: 1 1 auto;
+    border-radius: 10px;
+    border: 1px solid rgb(216, 216, 203);
+    overflow: hidden;
+}
+
+.icon{
+    padding: 0.8rem;
+}
+
+.searchbox{
+    border: 0;
+    flex: 1;
+}
+
+.searchbutton{
+    color: white;
+    background-color: blue;
+    border: 0;
+    padding: 0.8rem;
+    border-radius: 10px;
+}
+
+/*this part is for the list items*/
+.container2{
+    display: flex;
+    background-color: rgb(19, 19, 68);
+    flex-flow: row wrap;
+    justify-content: start;
+    border-radius: 10px;
+}
+
+.container2 li{
+    list-style-type: none;
+}
+
+.container2 a {
+    display: inline-flex;
+    padding: 25px;
+    margin:  8px;
+    text-align: center;
+    text-decoration: none;
+    color: rgb(218, 211, 211);
+}
+
+/*this part is for the image items*/
+.container3{
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 5px;
+}
+
+.sample{
+    margin: 5px;
+    border-radius: 10px;
+}
+
+/*This part is for the bar chart*/
+.row{
+    display: flex;
+    align-items: stretch;
+    background-color: burlywood;
+    border-radius: 5px;
+}
+
+.row .label{
+    flex: 0 0 auto;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    padding: 30px;
+   
+}
+
+.row .container4{
+    flex: 1;
+    display: flex;
+    justify-content: stretch;
+    padding: 10px;
+}
+
+.row .dish{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.Pasta{
+    background-color: rgb(86, 46, 124);
+}
+.Calamari{
+    background-color: cornflowerblue;
+}
+.Falafel{
+    background-color: aqua;
+}
