@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components{
+    .fancy{
+        @apply m-4 p-4 rounded-[16px] bg-gradient-to-r from-purple-400 to-blue-400 hover:from-purple-800 hover:to-blue-800 hover:text-white
+        font-semibold focus:ring-2 focus:ring-purple-300 transition-transform duration-[100ms] hover:scale-[1.08]
+    }
+}

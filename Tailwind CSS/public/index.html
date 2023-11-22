@@ -4,8 +4,103 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tailwind CSS installation</title>
+    <link rel="stylesheet" href="output.css">
+    <style>
+        @keyframes slideIn {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(0);
+            }
+        }
+
+        .customized-animation {
+            animation: slideIn 1s ease-in-out; /* Adjust the animation properties */
+        }
+    </style>
 </head>
-<body>
-    
+<body class="bg-yellow-100">
+    <h1 class="w-[60%] text-green-900 text-6xl text-center bg-lime-400 pl-52  border-[50px] mt-11 border-blue-900">TAILWIND INSTALLATION IS SUCCESSFUL</h1>
+    <div class="w-full h-fit text-center text-2xl m-10 text-purple-900 bg-purple-400 border-y-[10px] border-purple-950 py-3">
+        TAILWIND INSTALLATION IS NOT SUCCESSFUL
+    </div>
+    <!--This part is to talk about positioning in css-->
+    <div class="fixed w-11 h-11 bg-green-700 my-10 top-0"></div>
+    <div class="w-full h-fit text-center text-2xl m-10 text-purple-900 bg-purple-400 border-y-[10px] border-purple-950 py-3">
+        TAILWIND INSTALLATION IS NOT SUCCESSFUL
+    </div>
+    <!--This part is to talk about display such as(flex,grid,block,inline,inline-flex/block) in css-->
+    <div class="flex justify-between gap-9">
+        <div class="w-10 h-10 rounded-[8px] bg-blue-600"></div>
+        <div class="w-10 h-10 rounded-[8px] bg-red-600"></div>
+        <div class="w-10 h-10 rounded-[8px] bg-purple-600"></div>
+    </div>
+    <div class="grid grid-cols-4 grid-rows-3 gap-4 mt-9">
+        <div class=" bg-teal-400 h-9"></div>
+        <div class=" bg-teal-400 h-9"></div>
+        <div class=" bg-teal-400 h-9"></div>
+        <div class=" bg-teal-400 h-9"></div>
+    </div>
+    <!--This part is to talk about media queries sm=(min-width= 640px)/md=(min-width= 768px)/
+         lg=(min-width= 1024px)/xl=(min-width= 1280px)
+        adding 'max' infront of it makes it 'max-width' e.g(max-sm = (max-width= 640px))-->
+    <div class="max-sm:block hidden ">
+        <p>SMALL SCREEN ONLY THATS WHAT I AM FOR i.e 640px</p>
+    </div>
+    <div class="max-md:block hidden ">
+        <p>MEDIUM SCREEN ONLY // THATS WHAT I AM FOR i.e 768px</p>
+    </div>
+    <div class="max-lg:block hidden ">
+        <p>LARGE SCREEN ONLY () THATS WHAT I AM FOR</p>
+    </div>
+    <!--This part is to talk about pseudo classes like(hover, focus, active) in css-->
+    <button type="submit" class=" bg-blue-500 text-white py-2.5 px-2.5 rounded-[16px] m-4 hover:bg-blue-700 
+    focus:outline-none focus:ring-4 focus:ring-blue-500 active:bg-blue-900">
+        Click to Submit
+    </button>
+    <ul class="bg-slate-200 p-5 space-y-2">
+        <li class=" first:bg-red-700 p-2">The first list</li>
+        <li class="even:bg-green-500 odd:bg-purple-600 p-2">This second list</li>
+        <li class="even:bg-green-500 odd:bg-purple-600 p-2">The third list</li>
+        <li class="even:bg-green-500 odd:bg-purple-600 p-2">The fouth list</li>
+        <li class="even:bg-green-500 odd:bg-purple-600 p-2">The fifth list</li>
+    </ul>
+    <!--This part is to talk about darkmode in css-->
+    <div class="m-10 p-6 bg-white rounded-2xl shadow-xl ring-1 ring-slate-900/5 dark:bg-slate-950">
+        <h1 class="text-lg font-bold tracking-wide dark:text-white">This is to test darkmode</h1>
+        <p class="mt-3 font-sans  dark:text-white">This paragraph is part of the test for darkmode stay tuned</p>
+         
+        <button id="Darkmode button" class=" bg-blue-400 p-4 m-5 rounded-full text-blue-950
+        text-[18px] hover:bg-blue-700 hover:text-white active:bg-blue-900 dark:bg-cyan-300 dark:hover:text-slate-400 animate-pulse" 
+         onclick="document.body.classList.toggle('dark')">
+            Click for dark mode
+            <!--we create a javascript function to control the toggling off and on of the dark mode-->
+        </button>
+    </div>
+    <!--This part is to show transition and gradient and we demonstrate how to represent all the styles in one class-->
+    <button class="fancy" >
+        <!-- m-4 p-4 rounded-[16px] bg-gradient-to-r from-purple-400 to-blue-400 hover:from-purple-800 hover:to-blue-800 hover:text-white
+        font-semibold focus:ring-2 focus:ring-purple-300 transition-transform duration-[100ms] hover:scale-[1.08-->
+        Fancy Click</button>
+            <!--This part shows how you can add custom colors and custom animation-->
+    <p class="m-4 text-[18px] text-[#792020] p-[16px] bg-[gold] rounded-[12px] dark:bg-[#792020] dark:text-[gold] customized-animation">This paragraph is to test custom color inclusion</p>
+
+    <!--This part was to test the action of the float-left style-->
+    <div class=" bg-green-600 h-10 w-[100px] m-5 float-right"></div>
+    <script type="text/javascript">
+        document.addEventListener("DOMContentLoaded", ()=>{
+            const toggleDark = document.getElementById('toggleDark')
+            toggleDark.addEventListener('click',function(){
+            if (document.documentElement.classList.includes('dark')){
+                document.documentElement.classList.remove('dark') 
+            }
+            else{
+                document.documentElement.classList.add('dark')   
+            }
+            alert("Click!")
+            })
+        })
+    </script>
 </body>
 </html>
