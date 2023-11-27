@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body{
+            background-color: azure;
+            font-family: 'Roboto', sans-serif;
+        }
+        header{
+            text-align: center;
+        }
+        .container{
+            --tw-bg-opacity: 1;
+            background-color: rgb(148 163 184 / var(--tw-bg-opacity));
+            width: fit-content;
+            margin: 0 auto;
+            padding: 40px;
+            border-radius: 10px;
+        }
+        .container input{
+            width: 200px;
+            margin: 10px 30px 10px 0;
+            height: 24px;
+            border-radius: 8px;
+            border: 2px transparent;
+        }
+        .form-bitch{
+            color:rgb(10, 10, 94);
+            text-align:left
+        }
+        .item{
+            list-style-type: none;
+            margin: 14px 0 10px 30px;
+            --tw-bg-opacity: 1;
+            background-color: rgb(148 163 184 / var(--tw-bg-opacity));
+            width: 300px;
+            padding: 10px;
+            border-radius: 10px;
+            margin: 5px auto;
+        }
+        .item li{
+            background-color: rgb(102, 206, 206);
+        }
+    </style>
+</head>
+<body>
+    <header class="bg-slate-400">
+        <h1>This is a DOM tutorial</h1>
+    </header>
+    <div class="container">
+    <form id="form-id">
+        <h3 class="form-bitch">Fill the form</h3>
+        <div class="for-name">
+            <label for="enter-name">Name</label><br>
+            <input type="text" id="enter-name" required>
+        </div>
+        <div class="for-email">
+            <label for="enter-email">Email</label><br>
+            <input type="email" id="enter-email" required>
+        </div>
+        <input class="btn" type="submit">
+    </form>
+    </div>
+    <ul class="list"></ul>
+
+    <ul class="item">
+        <li class="item">Item 1</li>
+        <li class="item">Item 2</li>
+        <li class="item">Item 3</li>
+        <li class="item">Item 4</li>
+    </ul>
+    <script src="welcome back .js"></script>
+</body>
+</html>

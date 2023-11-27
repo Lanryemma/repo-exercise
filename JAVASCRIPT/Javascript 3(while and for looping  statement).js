@@ -3,6 +3,11 @@
 for (var i = 1; i < 4; i++){
     console.log(i)
 }
+
+/*for (var i = 1; i < 4; i+=0.5){
+    console.log(i)
+}*///this part is to loop the'i' with an increment
+ 
 //this example of for loop tom= run a race
 console.log("Example 2 for loop")
 for (var i = 1; i < 4; i=i+1){
