@@ -73,6 +73,7 @@ class Animal {
 
 class Dog extends Animal {
     constructor() {
+        super()
         this.noise = "bark";
     }
 
@@ -83,7 +84,7 @@ class Dog extends Animal {
 
 class Wolf extends Dog {
     constructor() {
-        //super();
+        super()
         this.noise = "growl";
     }
 }

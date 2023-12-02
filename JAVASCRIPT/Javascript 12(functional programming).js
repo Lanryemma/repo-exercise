@@ -122,8 +122,8 @@ if(useRandom) {
 addTwoNums(getNumber(), getNumber())
 
 //example of Higher-order function using the functions from the previous code above
-addTwoNums(specificNum, specificNum); // returned number is 84
-addTwoNums(specificNum, randomNum); // returned number is 42 + some random number
+addTwoNums(specificNum(), specificNum()); // returned number is 84
+addTwoNums(specificNum(), randomNum()); // returned number is 42 + some random number
 
 //example of Pure functions and side-effects
 /*function addTwoNums(a, b) {

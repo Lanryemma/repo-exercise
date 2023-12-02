@@ -6,7 +6,7 @@ var sum = 0;
 for (i = 0;i < avg.length; i++){
     sum +=avg[i]
 }
-console.log(sum/avg.length)
+console.log(Math.round(sum/avg.length))
 
 //Using the set data structure
 h1 = 'red';
@@ -76,7 +76,7 @@ bestBoxers.set(3, "The third place");
 
 console.log(bestBoxers);
 //To get a specific value, you need to use the get() method
-bestBoxers.get(1); // 'The Champion'
+console.log(bestBoxers.get(1)); // 'The Champion'
 
 
 //Working with Sets in JavaScript

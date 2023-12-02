@@ -1,6 +1,6 @@
 //this is to refresh my memories on some javascript concepts
 
-const { Children } = require("react");
+//const { Children } = require("react");
 
 //alert('hello world');
 console.error('This is an error');
@@ -271,7 +271,7 @@ class classperson {
     this.getbirtyear = function(){//this is called a method
         return this.dob.getFullYear();
     }
-}  
+ }  
 }
 
 classperson.prototype.getfulname = function(){

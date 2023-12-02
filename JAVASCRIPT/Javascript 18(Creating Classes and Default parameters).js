@@ -188,7 +188,7 @@ class NoDefaultParams {
         return "The value of bool1 is incorrect"
     }
 }
-var fail = new NoDefaultParams(1,2,3,false);
+var fail = new NoDefaultParams(1,2,3,'result',true);
 console.log(fail.calculate()); // 'The value of bool1 is incorrect'
 
 //However, now that you know about default parameters, 

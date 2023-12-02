@@ -147,7 +147,7 @@ bird.hasFeathers = true;
 function birdcan() {
     for (key of Object.keys(bird)) {
         console.log(key+':', bird[key])
-        //console.log(`${key}: ${bird[key]}`)//this is the correct wayto log it
+        //console.log(`${key}: ${bird[key]}`)//this is the correct way to log it
     }
 }
 //calling the function
