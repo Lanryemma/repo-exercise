@@ -33,5 +33,6 @@ function app(){
 
 //to create new react file we use this commands
 //first on the terminal run: npm init react-app (whatever name you want to give to ur app)
+//npx create-react-app my-app
 //then you'll run: cd firstapp
 //finally you'll run:  npm start
