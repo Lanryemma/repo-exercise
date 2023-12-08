@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Hide the default body scrollbars */
+        }
+        .container{
+            display: flex;
+            /*display: grid;
+            grid-template-columns: 1fr 1fr;*/
+        }
+
+        .segment {
+            height: 100vh; /* Set the height of each segment to 100% of the viewport height */
+            overflow-y: auto; /* Enable vertical scrolling for segments that exceed the viewport height */
+            border: 1px solid #ddd; /* Optional: Add a border for visibility */
+            /*width: 50%;*/
+            flex: 1;
+        }
+
+        /* Add some content and styling for demonstration purposes */
+        #segment1 {
+            background-color: #f2f2f2;
+        }
+
+        #segment2 {
+            background-color: #e6e6e6;
+        }
+
+        /* Adjust padding and margin as needed for your layout */
+        .content {
+            padding: 20px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="segment1" class="segment">
+            <div class="content">
+                <h2>Segment 1</h2>
+                <!-- Add your content here -->
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <p>This is the content of segment 1.</p><br>
+                <!-- Add more content as needed -->
+            </div>
+        </div>
+    
+        <div id="segment2" class="segment">
+            <div class="content">
+                <h2>Segment 2</h2>
+                <!-- Add your content here -->
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <p>This is the content of segment 2.</p><br>
+                <!-- Add more content as needed -->
+            </div>
+        </div>    
+    </div>
+    
+</body>
+</html>
