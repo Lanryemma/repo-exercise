@@ -2,7 +2,8 @@ import logo from './logo.svg';
 import './App.css';
 import food1 from './food1.jpg'
 import Card from './Card.js'
-import { Eventhandling, Eventhandle } from './Event-handeling.js';
+import { Eventhandling, Eventhandle, DynamicEvents } from './Event-handeling.js';
+import Togglemode from './Togglemode.js';
 
 
 
@@ -65,6 +66,12 @@ function Appp(){
             </div>
             <div>
               <Eventhandle/>
+            </div>
+            <div>
+              <Togglemode/>
+            </div>
+            <div>
+              <DynamicEvents/>
             </div>
           </div>) 
 }
