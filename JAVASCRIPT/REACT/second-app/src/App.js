@@ -15,6 +15,7 @@ import Fruits from "./Fruits";
 import FruitsCounter from "./FruitsCounter";
 import { Darkmode } from './Darkmode';
 import Sharing from './Sharing'
+import { Assign } from './Hooks';
 
 
 
@@ -99,7 +100,9 @@ function App() {
       <div>
         <Sharing/>
       </div>
-      
+      <div>
+        <Assign/>
+      </div>
     </div>
   );
 }
