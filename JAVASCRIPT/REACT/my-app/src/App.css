@@ -55,8 +55,37 @@ button {
   background: whitesmoke;
   margin-right: 5px;
 }
-button:nth-last-child(2),
-button:nth-last-child(1) {
+.but:nth-last-child(2),
+.but:nth-last-child(1) {
   background: tomato;
   color: white;
+}
+
+input,
+select {
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.sign {
+  padding: 12px;
+  width: 240px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: darkblue;
+  color: white;
+  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.sign:disabled,
+.sign[disabled] {
+  border: 1px solid #999999;
+  background-color: #cccccc;
+  color: #666666;
+  cursor: not-allowed;
 }
