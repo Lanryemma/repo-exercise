@@ -1,0 +1,85 @@
+//fetching data from a third-party API is considered a side-effect that requires 
+//the use of the useEffect hook to deal with the Fetch API calls in React
+//example where a component is fetching some data from an external API to 
+//display information about a cryptocurrency.
+import { useState, useEffect } from "react"; 
+ 
+export function App1() { 
+  const [btcData, setBtcData] = useState({}); 
+  useEffect(() => { 
+    fetch(`https://api.coindesk.com/v1/bpi/currentprice.json`) 
+      .then((response) => response.json()) 
+      .then((jsonData) => setBtcData(jsonData.bpi.USD)) 
+      .catch((error) => console.log(error)); 
+  }, []); 
+ 
+  return ( 
+    <> 
+      <h1>Current BTC/USD data</h1> 
+      <p>Code: {btcData.code}</p> 
+      <p>Symbol: {btcData.symbol}</p> 
+      <p>Rate: {btcData.rate}</p> 
+      <p>Description: {btcData.description}</p> 
+      <p>Rate Float: {btcData.rate_float}</p> 
+    </> 
+  ); 
+} 
+
+
+//Alternatively, you might extract this anonymous function into a separate function 
+//expression or function declaration, and then just reference it.
+export function App2() { 
+    const [btcData, setBtcData] = useState({}); 
+   
+    const fetchData = () => { 
+      fetch(`https://api.coindesk.com/v1/bpi/currentprice.json`) 
+        .then((response) => response.json()) 
+        .then((jsonData) => setBtcData(jsonData.bpi.USD)) 
+        .catch((error) => console.log(error)); 
+    }; 
+   
+    useEffect(() => { 
+      fetchData(); 
+    }, []); 
+   
+    return ( 
+      <> 
+        <h1>Current BTC/USD data</h1> 
+        <p>Code: {btcData.code}</p> 
+        <p>Symbol: {btcData.symbol}</p> 
+        <p>Rate: {btcData.rate}</p> 
+        <p>Description: {btcData.description}</p> 
+        <p>Rate Float: {btcData.rate_float}</p> 
+      </> 
+    ); 
+  } 
+
+
+//This examples shows that in order to fetch data from a third party API, 
+//you need to pass an anonymous function as a call to the useEffect hook. 
+useEffect( 
+    () => { 
+        // ... data fetching code goes here 
+    }, 
+    [] 
+);
+
+//Very often, the response from fetching third-party data might fail, 
+//or be delayed. That's why it can be useful to provide different renders, 
+//based on whether or not the data has been received.
+//for example
+return someStateVariable.length > 0 ? ( 
+    <div> 
+      <h1>Data returned:</h1> 
+      <h2>{someStateVariable.results[0].price}</h2> 
+    </div> 
+  ) : ( 
+    <h1>Data pending...</h1> 
+  ); 
+
+//In this example, I'm conditionally returning an h1 and h2, 
+//if the length of the someStateVariable binding's length is longer than 0.
+//If the someStateVariable is initialized as an empty array ypou can update the state of the
+// 'someStateVariable' with an Array returned from the fetch() call
+//If this works out as described above, the length of the someStateVariable would increase 
+//from the starting length of zero - because an empty array's length is zero.

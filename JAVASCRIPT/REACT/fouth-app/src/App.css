@@ -15,7 +15,7 @@
 
 .App-header {
   background-color: #282c34;
-  min-height: 100vh;
+  
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -36,3 +36,65 @@
     transform: rotate(360deg);
   }
 }
+
+/*--------------------------------------------------------------------------------*/
+.switch {
+  position: relative;
+}
+
+.toggle-input {
+  display: none;
+}
+
+.toggle-label {
+  display: block;
+  width: 50px;
+  height: 30px;
+  background-color: #ccc;
+  border-radius: 15px;
+  position: relative;
+  cursor: pointer;
+}
+
+.toggle-input:checked + .toggle-label {
+  background-color:  #2196F3; /* Change the background color when checked */
+}
+
+.toggle-label::before {
+  content: '';
+  width: 26px;
+  height: 26px;
+  background-color: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-input:checked + .toggle-label::before {
+  transform: translateX(20px);
+  background-color: black; /* Change the color when checked */
+}
+/*----------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------------------*/
+.Appp {
+  display: flex;
+  padding: 16px;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.Appp header {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+.Appp .Page {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+/*-------------------------------------------------------------------------------------*/
