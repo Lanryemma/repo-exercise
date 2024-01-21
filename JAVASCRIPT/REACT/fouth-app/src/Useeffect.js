@@ -19,7 +19,7 @@ export function EffectApp(){
             <button onClick={Changetoggle}>
                 view
             </button>
-            {toggle && <p>Thi Message will Disappearwhen you click again</p>}
+            {toggle && <p>This Message will Disappear when you click again</p>}
         </div>
     )
  }

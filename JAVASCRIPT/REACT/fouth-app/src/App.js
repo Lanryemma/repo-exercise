@@ -5,6 +5,9 @@ import { FormApp } from './UseStateForm';
 import { NewApp } from './Assignment';
 import { EffectApp } from './Useeffect';
 import { DataApp, App2 } from './FetchingData';
+import { CustomHook } from './customHook';
+import { AssignmentApp } from './Assignment 2';
+import { RadioGroup, RadioOption } from './React.Children and React,cloneElement';
 
 
 const Switch = () => {
@@ -92,6 +95,23 @@ const Appp = ()=>{
     </div>
   );
 }
+//===============================================================================================
+function Radio(){
+  const [selected, setSelected] = useState("");
+  return (
+    <div className="App">
+      <h2>How did you hear about Little Lemon?</h2>
+      <RadioGroup onChange={setSelected} selected={selected}>
+        <RadioOption value="social_media">Social Media</RadioOption>
+        <RadioOption value="friends">Friends</RadioOption>
+        <RadioOption value="advertising">Advertising</RadioOption>
+        <RadioOption value="other">Other</RadioOption>
+      </RadioGroup>
+      <button disabled={!selected}>Submit</button>
+    </div>
+  );
+}
+
 
 function App() {
   return (
@@ -104,6 +124,9 @@ function App() {
       <EffectApp/>
       <DataApp/>
       <App2/>
+      <CustomHook/>
+      <AssignmentApp/>
+      <Radio/>
     </div>
   );
 }
