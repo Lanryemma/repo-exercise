@@ -8,7 +8,7 @@ import Promo from './Promo';
 import Footer from './Footer';
 import { InputComponent1, TextInputWithFocusButton } from './Hooks';
 import { Change1, Repeat } from './State';
-import { useState } from 'react';
+import {useState} from 'react';
 import {LadeComponent} from './LadeComponent'
 import { LadeContext } from './LadeContext';
 import Fruits from "./Fruits";

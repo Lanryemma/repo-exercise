@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import  {useState} from 'react';
 
 const DataFetcher =( {render,Url})=>{
     const [Data,setData]= useState([])
@@ -10,7 +10,7 @@ const DataFetcher =( {render,Url})=>{
         }
     }, [Url])
     
-    render(Data)
+    return render(Data)
 }
 
 const DessertCount =()=>{
