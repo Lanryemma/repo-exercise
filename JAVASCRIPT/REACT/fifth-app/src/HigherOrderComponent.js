@@ -41,7 +41,7 @@ export const HigherOrderDisplay =()=>{
 //to harness the mouseposition
 const CatchMousePosition =(WrapComponent)=>{
   
-const Return=(props)=>{
+ const Return=(props)=>{
      const [position, setposition] = useState({
        x: 0,
        y: 0,
