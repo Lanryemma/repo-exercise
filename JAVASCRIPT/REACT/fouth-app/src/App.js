@@ -20,7 +20,7 @@ const Switch = () => {
         onChange={toggleTheme}
         id="toggle" class="toggle-input"
       />
-      <label for="toggle" class="toggle-label"></label>
+      <label htmlFor="toggle" class="toggle-label"></label>
     </label>
   );
  };
