@@ -8,7 +8,10 @@
  const App =()=> {
   return (
     <main className="relative">
+        NAV 
+      <section className="xl:padding-1">
 
+      </section>
     </main>
   )
  }
