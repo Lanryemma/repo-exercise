@@ -15,7 +15,7 @@ export const Nav = () => {
   return (
     <header className='padding-x py-8 z-10 absolute w-full'> 
       <nav className='flex justify-between items-center max-container max-sm:flex-wrap'>
-        <a href='/' className=' relative flex items-start ml-[24px] mr-[24px] max-sm:mr-[8px]'>
+        <a href='/' className='relative block items-start ml-[24px] mr-[24px] max-sm:mr-[8px]'>
           <img  src={headerLogo}
           alt='Nike Logo'
           width={130}
