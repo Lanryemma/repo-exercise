@@ -94,7 +94,7 @@ def print_greetings(greeting, title, first,last):
 print_greetings("hello" ,last="Olayokun",first="Ololade",title="Mr")#the order at which the parameters are written doesnt matter 
 
 #BUILT IN KEYWORD ARGUMENTS
-print("1","2","3","4","5",sep=" ")#sep= built in keyword function to seperate by " "
+print("1","2","3","4","5",sep=" ")#sep= built in keyword function to separate by " "
 
 #Lets build a program to generate phone number
 def get_phone(country, area, first, last):
