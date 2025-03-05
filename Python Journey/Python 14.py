@@ -219,3 +219,62 @@ print(book2['author'])#To test the __getitem__ magic method
 print(book2['num_pages'])#To test the __getitem__ magic method
 print(book2['Color'])#To test the __getitem__ magic method incase they pass in a keys thats not in the object
 
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#@property = Decorator used to define a method as a property (it can be accessed like an attribute)
+#            benefit: add additional logic when read,write,or delete attributes
+#            Gives you getter(to read), setter(to write) and deleter(to delete)
+
+class Rectangle:
+    def __init__(self,width,height):
+        self._width = width #we will turn the parameter "width" private buy adding '_'(_width)
+        self._height = height#we will turn the parameter "height" private buy adding '_'(_height)
+    
+    #Now we use property decorator
+    @property
+    def width(self):#This is a getter method used to get private parameter "_width" 
+        return f"{self._width:2f}cm"
+    
+    @property
+    def height(self):#This is a getter method used to get private parameter "_height"
+        return f"{self._height:2f}cm"
+    
+    @width.setter
+    def width1(self,new_width):#This is a setter method used to rewrite private parameter "_width"
+        if new_width > 0:
+            self._width = new_width
+        else:
+            print("width must be greater than zero")
+        
+
+    @height.setter
+    def height1(self,new_height):#This is a setter method used to rewrite private parameter "_height"
+        if new_height > 0:
+            self._height = new_height
+        else:
+            print("height must be greater than zero")
+    
+    
+    @width.deleter
+    def width2(self):#This is a deleter method used to delete the private parameter "_width"
+        del self._width
+        print("width has been deleted")
+    
+    @height.deleter
+    def height2(self):#This is a deleter method used to delete the private parameter "_height"
+        del self._height
+        print("height has been deleted")
+
+rectangle = Rectangle(3, 4)
+
+rectangle.width1 = 5
+rectangle.height1 = 7
+
+del rectangle.width2#this will delete the private parameter "_width"
+del rectangle.height2#this will delete the private parameter "_height"
+
+
+print(rectangle.width)#we cant access private parameters like this 
+print(rectangle.height)#we cant access private parameters like this 
