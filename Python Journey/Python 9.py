@@ -118,7 +118,7 @@ def add(*args): #the name "args" can be changed to what ever you like
     return total
 
 
-print(1,2,3,4,5)
+print(add(1,2,3,4,5))
 
 #EXAMPLE 2
 #a program to print the name of a person

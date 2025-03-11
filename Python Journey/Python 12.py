@@ -2,7 +2,7 @@
 import random
 import string
 
-"""chars = " " + string.punctuation + string.digits + string.ascii_letters
+chars = " " + string.punctuation + string.digits + string.ascii_letters
 print(chars)
 #now we turn chars to a list so that we can use its elements individual
 chars = list(chars)
@@ -33,7 +33,7 @@ for char in encrypted_message:
    plain_text += chars[index]
 
 print(f"Encrypted message: {encrypted_message}")
-print(f"Original message: {plain_text}")"""
+print(f"Original message: {plain_text}")
 
 
 

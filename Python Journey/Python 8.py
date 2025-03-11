@@ -152,7 +152,23 @@ print()
 
 print("HORIZONTAL VIEW BELOW")
 #this is to arrange the dice horizontally
-for line in range(num_of_dice + 1):
+
+"""if num_of_dice <= 5:
+    if num_of_dice == 1:
+        completion_num = 4
+    elif num_of_dice == 2:
+        completion_num = 3
+    elif num_of_dice == 3:
+        completion_num = 2
+    elif num_of_dice == 4:
+        completion_num = 1
+    elif num_of_dice == 5:
+        completion_num = 0
+else:
+    completion_num = 0"""
+
+completion_num = 5 #because each dice art is drawn on five lines
+for line in range(completion_num): #it needs to iterate five times to draw each dice art
     for dic in dice:
         print(dice_art.get(dic)[line], end=" ")
     print()
