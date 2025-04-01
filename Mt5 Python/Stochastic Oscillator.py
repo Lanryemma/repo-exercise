@@ -64,3 +64,19 @@ def stochastic(DF, lookback=14, k=3, d=3):
 hist_data[["%k","%d"]] = stochastic(hist_data)
 
 print(hist_data)
+
+
+#______________________________________________________________________________________________________________________________
+#A short brief code 
+"""def stochastic_oscillator(data, k_period=14, d_period=3):
+        #Calculate Stochastic Oscillator (K and D values)
+    data['Lowest_Low'] = data['low'].rolling(window=k_period).min()
+    data['Highest_High'] = data['high'].rolling(window=k_period).max()
+    
+    data['%K'] = 100 * ((data['close'] - data['Lowest_Low']) / (data['Highest_High'] - data['Lowest_Low']))
+    data['%D'] = data['%K'].rolling(window=d_period).mean()  # 3-period SMA of %K
+    
+    return data
+
+# Apply Stochastic Calculation
+df = stochastic_oscillator(hist_data)"""
