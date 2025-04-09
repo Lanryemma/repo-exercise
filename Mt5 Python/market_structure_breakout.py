@@ -420,7 +420,7 @@ for i in range(len(data)-1):
             signal = None
             trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
             data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-    # if symbol == "USDSEK": 
+    # # if symbol == "USDSEK": 
     #     candle_data.iloc[i,-1] = candle_data.iloc[i,-1]/5 #adjust for pos size of USDSEK            
 if trade_stats and trade_stats[-1]["close_price"] == None:
     trade_stats[-1]["close_price"] = data.iloc[-1,cp_index] #update the cp of last trade as the current price

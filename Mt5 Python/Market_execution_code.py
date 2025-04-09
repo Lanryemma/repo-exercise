@@ -9,6 +9,8 @@ from pandas import Series
 import time
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 from Email_generation import send_email
+from Get_position_size import get_pos_size
+from market_structure_breakout import parabolic_sar,calculate_volatility, MACD, calculate_heikin_ashi,calculate_atr_trailing, generate_signals,calculate_zigzag, detect_msb
 
 
 # display data on the MetaTrader 5 package
@@ -34,8 +36,24 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
 else:
     print("connection established")
 
+cumulative_pnl = []
+PROFIT_TARGET = 1000    # Set your desired profit target in account currency
+LOSS_LIMIT = -500       # Set your maximum acceptable loss in account currency
+MAX_HOLD_TIME = timedelta(hours=4)  # 4-hour maximum holding period
+tz = pytz.timezone("Europe/Kyiv")   # Your existing timezone definition
 
-def get_hist_data_numeric_index(mt5, symbol, timeframe, start_pos=0, num_candles=200):
+
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#TECHNICAL INDICATOR WE ARE GOING TO GET DATAs FOR THE STRATEGY BACK-TESTING
+
+params = pd.read_csv("C:\\Users\\user\\Downloads\\params.csv")
+symbols = params.Symbol.to_list()
+print(params)
+
+
+def get_hist_data_numeric_index(symbol, timeframe, start_pos=0, num_candles=200):
     """
     Parameters
     ----------
@@ -53,19 +71,24 @@ def get_hist_data_numeric_index(mt5, symbol, timeframe, start_pos=0, num_candles
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#TECHNICAL INDICATOR WE ARE GOING TO GET DATAs FOR THE STRATEGY BACK-TESTING
 
-params = pd.read_csv("C:\\Users\\user\\Downloads\\params.csv")
-symbols = params.Symbol.to_list()
-print(params)
+
+#_____________________________________________________________________________________________________________________________________________________________________
+
+
+#________________________________________________________________________________________________________________________________________________
+
+
 
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #TECHNICAL UTILITIES WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
+
+
+def get_pip(symbol):
+    return 10*mt5.symbol_info(symbol).point  
+
 
 def place_bracket_order(symbol,vol,buy_sell,sl_price,tp_price):
     if buy_sell.capitalize()[0] == "B":
@@ -107,65 +130,154 @@ def get_position_df():
     return pos_df
 
 
-def trade_signal(candle_data,l_s):
+
+
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#THIS IS THE MAIN MARKET EXECUTION CODE
+def trade_signal(data,l_s):
     signal = ""
-    macd_index = candle_data.columns.to_list().index("macd")
+    hstgrm_index = data.columns.to_list().index("histogram")
+    signal_index = data.columns.to_list().index("signal")
+    buy_signal_index = data.columns.to_list().index('buy_signal')
+    sell_signal_index = data.columns.to_list().index('sell_signal')
+    ha_color = data.columns.to_list().index("color")
     
     if l_s == "":
-        if candle_data.iloc[-2,macd_index]>0 and candle_data.iloc[-3,macd_index]>0 and (candle_data.iloc[-10:-3,macd_index] < 0).all(): #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
+        if data.iloc[-2,hstgrm_index] > 0 and data.iloc[-2,buy_signal_index] == True  and\
+            data.iloc[-2,signal_index] == 1 and data.iloc[-2,ha_color] == 'green': #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
             signal = "Buy"
-        elif candle_data.iloc[-2,macd_index]<0 and candle_data.iloc[-3,macd_index]<0 and (candle_data.iloc[-10:-3,macd_index] > 0).all():
+        elif data.iloc[-2,hstgrm_index] < 0 and data.iloc[-2,sell_signal_index] == True  and\
+            data.iloc[-2,signal_index] == -1 and data.iloc[-2,ha_color] == 'red':
             signal = "Sell"
             
-    elif l_s == "long":
-        if (candle_data.iloc[-4:-1,macd_index] < 0).all():
-            signal = "Close"
+    # elif l_s == "long":
+    #     if (candle_data.iloc[-4:-1,macd_index] < 0).all():
+    #         signal = "Close"
             
-    elif l_s == "short":
-        if (candle_data.iloc[-4:-1,macd_index] > 0).all():
-            signal = "Close"
+    # elif l_s == "short":
+    #     if (candle_data.iloc[-4:-1,macd_index] > 0).all():
+    #         signal = "Close"
     
     return signal
 
+
+# Add this function above the main trading loop
+def check_pnl_threshold():
+    global cumulative_pnl
+    total = sum(cumulative_pnl)
+    
+    if total >= PROFIT_TARGET:
+        print(f"Profit target reached! Total profit: {total}")
+        send_email(f"Profit target achieved! Total P&L: {total}")
+        return True
+    elif total <= LOSS_LIMIT:
+        print(f"Loss limit triggered! Total loss: {total}")
+        send_email(f"Loss limit breached! Total P&L: {total}")
+        return True
+    return False
+
+
 def main(symbol):
     hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe"].to_list()[0]
-    supp_res_timeframe = params.loc[params.Symbol==symbol,"supp_res_timeframe"].to_list()[0]
     
     try:
+        # Single data fetch at beginning
+        data = get_hist_data_numeric_index(symbol, hist_timeframe)
+        
+        # Calculate all indicators once
+        ha_data = calculate_heikin_ashi(data)
+        data[['ha_open', 'ha_close', 'color']] = ha_data[['ha_open', 'ha_close', 'color']]
+        data[["macd","signal","histogram"]] = MACD(data)
+        data['trailing_stop'] = calculate_atr_trailing(data)
+        data['ema1'] = data['close'].ewm(span=1).mean()
+        data['buy_signal'] = (data['close'] > data['trailing_stop']) & (data['ema1'] > data['trailing_stop'])
+        data['sell_signal'] = (data['close'] < data['trailing_stop']) & (data['ema1'] < data['trailing_stop'])
+        data['zigzag'] = calculate_zigzag(data)
+        msb_lines = detect_msb(data, data['zigzag'])
+        data = generate_signals(data, msb_lines)
+        data['volatility'] = calculate_volatility(data, 34, 2.4)
+        data['sar'] = parabolic_sar(data)
+        current_sar = data.iloc[-1]['sar']
+
         open_pos = get_position_df()
         long_short = ""
+        signal = ""
+        pos_size = get_pos_size(symbol)
+        atr = data['volatility'] / get_pip(symbol)
+        
+        # Position management
         if len(open_pos) > 0:
             open_pos_cur = open_pos[open_pos.symbol==symbol]
             if len(open_pos_cur) > 0:
-                if (open_pos_cur.type * open_pos_cur.volume).sum() > 0:
-                    long_short = "long"
-                elif (open_pos_cur.type * open_pos_cur.volume).sum() < 0:
-                    long_short = "short"
-                    
-        ohlc = get_hist_data_numeric_index(symbol, hist_timeframe)
-        ohlc[["macd","signal","histogram"]] = MACD(ohlc)
-        signal = trade_signal(ohlc,long_short)
-        pos_size = get_pos_size(symbol)
-        
+                position_type = "long" if (open_pos_cur.type * open_pos_cur.volume).sum() > 0 else "short"
+                long_short = position_type
+                entry_time = open_pos_cur.iloc[0].time.to_pydatetime()
+                current_time = datetime.now(tz)
+                hold_duration = current_time - entry_time
+                
+                # Time-based exit check
+                if hold_duration >= MAX_HOLD_TIME:
+                    print(f"Time-based exit triggered for {symbol}")
+                    signal = "Close"
+                
+                # SAR Trailing Stop Update
+                ticket = open_pos_cur.iloc[0].ticket
+                current_sl = open_pos_cur.iloc[0].sl
+                if (position_type == "long" and current_sar > current_sl) or \
+                    (position_type == "short" and current_sar < current_sl):
+                    new_sl = current_sar
+                    request = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "symbol": symbol,
+                        "sl": new_sl,
+                        "tp": open_pos_cur.iloc[0].tp,
+                        "ticket": ticket
+                    }
+                    mt5.order_send(request)
+                    print(f"Updated SL to SAR value: {new_sl}")
+                    send_email(f"SAR Trailing Stop Update: {symbol} SL moved to {new_sl}")
+
+        # Generate trading signal if no time-based exit
+        if not signal:
+            signal = trade_signal(data, long_short)
+
+        # Order execution logic
         if signal == "Buy":
-            place_bracket_order(symbol,pos_size,signal,supp,res)
+            Bsl_pips = data["open"].iloc[-1] - 1.5 * atr.iloc[-1]
+            Btp_pips = data["open"].iloc[-1] + 3.0 * atr.iloc[-1]
+            place_bracket_order(symbol, pos_size, signal, Bsl_pips, Btp_pips)
+            # ... (rest of buy logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
-            
+
         elif signal == "Sell":
-            place_bracket_order(symbol,pos_size,signal,res,supp)
+            Ssl_pips = data["open"].iloc[-1] + 1.5 * atr.iloc[-1]
+            Stp_pips = data["open"].iloc[-1] - 3.0 * atr.iloc[-1]
+            place_bracket_order(symbol, pos_size, signal, Ssl_pips, Stp_pips)
+            # ... (rest of sell logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
-            
+
         elif signal == "Close":
-            close_position(symbol)
-            print("{}: Existing {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
-            send_email("{}: Existing {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
-       
+            # ... (existing close logic)
+            result = close_position(symbol)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                closed_pos = mt5.positions_get(ticket=result.order)
+                if closed_pos:
+                    profit = closed_pos[0].profit
+                    cumulative_pnl.append(profit)
+                    print(f"Closed position P&L: {profit} | Running Total: {sum(cumulative_pnl)}")
+            print("{}: Existing {} position closed for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
+            send_email("{}: Existing {} position closed for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
+            print(f"{datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')}: Position closed for {symbol} (Reason: {'Time Exit' if hold_duration >= MAX_HOLD_TIME else 'Strategy Exit'})")
+            send_email(f"{datetime.now(tz)}: Position closed for {symbol} (Reason: {'Time Exit' if hold_duration >= MAX_HOLD_TIME else 'Strategy Exit'})")
+
     except Exception as e:
         print(e)
-        send_email("{}: Error received for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),symbol))
-            
+        send_email(f"At{dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} Error for {symbol}: {str(e)}")
+        #send_email("{}: Error received for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),symbol))
 
 # Continuous execution  
 tz = pytz.timezone("Europe/Kyiv") #MT5 server timezone      
@@ -177,7 +289,7 @@ while time.time() <= timeout and dt.datetime.now(tz=tz).weekday() in [0,1,2,3,4]
         print("passthrough at ",time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
         for symbol in symbols:
             pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
-            tf = params.loc[params.Symbol==symbol,"backtest_timeframe"].to_list()[0]
+            tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
             if (time.time() - starttime) // 14400 == pt and tf =="TIMEFRAME_H4":
                 print("starting passthrough for: ",symbol)
                 main(symbol)
@@ -189,7 +301,18 @@ while time.time() <= timeout and dt.datetime.now(tz=tz).weekday() in [0,1,2,3,4]
             elif (time.time() - starttime) // 1800 == pt and tf =="TIMEFRAME_M30":
                 print("starting passthrough for: ",symbol)
                 main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1                  
+                params.loc[params.Symbol==symbol,"passthrough"] +=1 
+            elif (time.time() - starttime) // 900 == pt and tf =="TIMEFRAME_M15":
+                print("starting passthrough for: ",symbol)
+                main(symbol)
+                params.loc[params.Symbol==symbol,"passthrough"] +=1
+            elif (time.time() - starttime) // 300 == pt and tf =="TIMEFRAME_M5":
+                print("starting passthrough for: ",symbol)
+                main(symbol)
+                params.loc[params.Symbol==symbol,"passthrough"] +=1 
+        if check_pnl_threshold():
+            mt5.shutdown()
+            break
         time.sleep(1800 - ((time.time() - starttime) % 1800.0)) # 30 minute interval between each new execution
     except KeyboardInterrupt:
         print('\n\nKeyboard exception received. Exiting.')
