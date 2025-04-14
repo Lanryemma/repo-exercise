@@ -157,7 +157,7 @@ def place_bracket_order_pip(symbol,vol,buy_sell,sl_pip,tp_pip):
     return result
     
     
-place_bracket_order("USDCAD",0.1,"buy",1.3317,1.3347)
+#place_bracket_order("USDCAD",0.1,"buy",1.3317,1.3347)
 place_bracket_order_pip("GBPUSD",0.1,"sell",20,40)
 
 
@@ -167,7 +167,7 @@ def close_position(symbol,ticket=None):
     return mt5.Close(symbol,ticket=ticket)
 
     
-close_position("GBPUSD")#This will close all the USDCAD order that is opened 
+#close_position("GBPUSD")#This will close all the USDCAD order that is opened 
 #if you want to close a specific order you have to provide the ticket number"""
 
 

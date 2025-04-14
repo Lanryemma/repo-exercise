@@ -20,8 +20,8 @@ print("MetaTrader5 package version: ",mt5.__version__)
 
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -71,7 +71,7 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
-#give me the mt5 integration, the converted indicator and the signal generation and make the code easier to understand
+#give me the mt5 integration, the converted indicator with python and pandas library and the signal generation and make the code easier to understand
 
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
@@ -80,7 +80,7 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 
 # Fetch historical data from MT5
 # Configuration
-symbol = "GBPUSD"
+symbol = "EURUSD"
 timeframe = "TIMEFRAME_M15"
 data = get_hist_data(symbol, timeframe,35040, time_till=None )
 # Configuration
@@ -220,6 +220,26 @@ def EMA(ser, n=9):
     ema = ser.ewm(n, adjust=False).mean()  # Built-in EMA calculation
     return ema
 
+def calculate_stc(DF, fast=23, slow=50, cycle=10):
+    """
+    Schaff Trend Cycle implementation
+    """
+    df = DF.copy()
+    
+    # 1. Calculate MACD
+    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+    macd = ema_fast - ema_slow
+    
+    # 2. Calculate Stochastics of MACD
+    lowest_macd = macd.rolling(window=cycle).min()
+    highest_macd = macd.rolling(window=cycle).max()
+    stoch = 100 * (macd - lowest_macd) / (highest_macd - lowest_macd)
+    
+    # 3. Double Smooth with EMA
+    stc = stoch.ewm(span=cycle, adjust=False).mean().ewm(span=cycle, adjust=False).mean()
+    
+    return stc
 
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
@@ -237,7 +257,7 @@ def calculate_volatility(DF, length, mult):
             # Calculate volatility bands
             return df['atr'] * mult
 
-def parabolic_sar(df, step=0.02, max_step=0.2):
+def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -308,6 +328,9 @@ data['volatility'] = calculate_volatility(data, 34, 2.4)
 #print(data['volatility'].tail(20))
 data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
 #print(data['sar'].tail(20))
+# In your strategy implementation section, add:
+data['stc'] = calculate_stc(data)
+
 
 print("Sample signals check:")
 print(data[['close', 'trailing_stop', 'signal', 'color']].tail(20))
@@ -328,6 +351,7 @@ op_index = data.columns.to_list().index("open")
 cp_index = data.columns.to_list().index("close")
 hi_index = data.columns.to_list().index("high")
 lo_index = data.columns.to_list().index("low")
+stc_index = data.columns.get_loc('stc')
 returns_index = data.columns.to_list().index("returns")
 
 # Strategy Implementation
@@ -345,8 +369,9 @@ for i in range(len(data)-1):
     
     
     if signal == None:
-        if (data.iloc[i,hstgrm_index] > 0 and data.iloc[i,buy_signal_index] == True  and\
-            data.iloc[i,signal_index] == 1 and data.iloc[i,ha_color] == 'green'
+        if (data.iloc[i,hstgrm_index] > 0 and data.iloc[i-1,hstgrm_index] > 0  and data.iloc[i,buy_signal_index] == True and\
+            data.iloc[i,signal_index] == 1  and data.iloc[i,ha_color] == 'green' and data.iloc[i-1,ha_color] == 'green' and\
+                data.iloc[i,stc_index] > 10 and  data.iloc[i,stc_index] > data.iloc[i-1,stc_index]      # STC above 25 = bullish momentum
             ):
                 
                 atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
@@ -363,8 +388,9 @@ for i in range(len(data)-1):
                                     "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                     "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
     
-        elif (data.iloc[i,hstgrm_index] < 0 and data.iloc[i,sell_signal_index] == True  and\
-            data.iloc[i,signal_index] == -1 and data.iloc[i,ha_color] == 'red'
+        elif (data.iloc[i,hstgrm_index] < 0 and data.iloc[i-2,hstgrm_index] < 0  and data.iloc[i,sell_signal_index] == True    and\
+            data.iloc[i,signal_index] == -1  and data.iloc[i,ha_color] == 'red' and data.iloc[i-1,ha_color] == 'red' and\
+                data.iloc[i,stc_index] < 90 and  data.iloc[i,stc_index] < data.iloc[i-1,stc_index]      # STC below 75 = bullish momentum
                 ):
                 atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                 sl_pips = 1.5 * atr  # 1.5x ATR
@@ -373,7 +399,7 @@ for i in range(len(data)-1):
                 trade_stats.append({"time":data.index[i],
                                     "entry_bar": i,
                                     "dir":"short",
-                                    "open_price":data.iloc[i+1,op_index] + 0.3*(data.iloc[i+1,hi_index] - data.iloc[i+1,op_index]), #factor slippage
+                                    "open_price":data.iloc[i+1,op_index] - 0.3*(data.iloc[i+1,op_index] - data.iloc[i+1,lo_index]), #factor slippage
                                     "close_price": None,
                                     #"sl_price":data[0].iloc[i+1,op_index] - 0.3*(data[0].iloc[i+1,op_index] - data[0].iloc[i+1,lo_index]) + 10*get_pip(symbol),
                                     #"tp_price":data[0].iloc[i+1,op_index] - 0.3*(data[0].iloc[i+1,op_index] - data[0].iloc[i+1,lo_index]) - 20*get_pip(symbol)
@@ -382,7 +408,7 @@ for i in range(len(data)-1):
                         
     elif signal == "long":
         current_sar = data.iloc[i]['sar']
-        max_hold_bars = 4 * 4  # 4 hours for M15
+        max_hold_bars = 12 * 6  # 4 hours for M15
     # Update SL to SAR if it's tighter
         #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
         #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -404,7 +430,7 @@ for i in range(len(data)-1):
             
     elif signal == "short":
         current_sar = data.iloc[i]['sar']
-        max_hold_bars = 4 * 4  # 4 hours for M15
+        max_hold_bars = 12 * 6  # 4 hours for M15
         #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
         if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
             signal = None

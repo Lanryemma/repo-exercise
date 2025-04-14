@@ -4,10 +4,8 @@ import pandas as pd #This is used to put our data in an organized format/frame
 import numpy as np
 import datetime as dt
 import pytz
-import matplotlib.pyplot as plot
 from pandas import Series
 import time
-from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 from Email_generation import send_email
 from Get_position_size import get_pos_size
 from market_structure_breakout import parabolic_sar,calculate_volatility, MACD, calculate_heikin_ashi,calculate_atr_trailing, generate_signals,calculate_zigzag, detect_msb
@@ -24,8 +22,8 @@ print("MetaTrader5 package version: ",mt5.__version__)
 
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -67,7 +65,7 @@ def get_hist_data_numeric_index(symbol, timeframe, start_pos=0, num_candles=200)
     """
     hist_data = mt5.copy_rates_from_pos(symbol, getattr(mt5, timeframe), start_pos, num_candles)   
     hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
+    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s").dt.tz_localize('UTC').dt.tz_convert(tz)
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
@@ -91,13 +89,52 @@ def get_pip(symbol):
 
 
 def place_bracket_order(symbol,vol,buy_sell,sl_price,tp_price):
-    if buy_sell.capitalize()[0] == "B":
-        direction = mt5.ORDER_TYPE_BUY
-        price = mt5.symbol_info_tick(symbol).ask
+    # Ensure symbol is selected in Market Watch
+    if not mt5.symbol_select(symbol, True):
+        print(f"Failed to add {symbol} to Market Watch")
+        return None
+    
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        print(f"Symbol info not found for {symbol}")
+        return None
 
+    # Handle missing stops_level attribute
+    # if not hasattr(symbol_info, 'stops_level'):
+    #     print(f"Warning: stops_level not available for {symbol}, using default 10 pips")
+    #     stops_level = 15  # Default to 10 pips if attribute missing
+    # else:
+    #     stops_level = symbol_info.stops_level
+    
+    # # Calculate min_stop using stops_level
+    # point = symbol_info.point
+    # min_stop = stops_level * point
+    
+    digits = symbol_info.digits
+    sl_price = round(sl_price, digits)
+    tp_price = round(tp_price, digits)
+    
+    
+    current_price = mt5.symbol_info_tick(symbol).ask if buy_sell == "Buy" else mt5.symbol_info_tick(symbol).bid
+    price = round(current_price, digits)
+    
+    if buy_sell == "Buy":
+        # if (price - sl_price) < min_stop:
+        #     print(f"Buy SL too close! Required distance: {min_stop} Current: {price - sl_price}")
+        #     return None
+        direction = mt5.ORDER_TYPE_BUY
     else:
+        # if (sl_price - price) < min_stop:
+        #     print(f"Sell SL too close! Required distance: {min_stop} Current: {sl_price - price}")
+        #     return None
         direction = mt5.ORDER_TYPE_SELL
-        price = mt5.symbol_info_tick(symbol).bid
+    # if buy_sell.capitalize()[0] == "B":
+    #     direction = mt5.ORDER_TYPE_BUY
+    #     price = mt5.symbol_info_tick(symbol).ask
+
+    # else:
+    #     direction = mt5.ORDER_TYPE_SELL
+    #     price = mt5.symbol_info_tick(symbol).bid
 
     
     request = {
@@ -112,7 +149,11 @@ def place_bracket_order(symbol,vol,buy_sell,sl_price,tp_price):
     }
     
     result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"Order failed: {result.comment}")
+        print(mt5.last_error())
     return result
+
 
 def close_position(symbol,ticket=None):
     return mt5.Close(symbol,ticket=ticket)
@@ -121,7 +162,7 @@ def get_position_df():
     positions = mt5.positions_get()
     if len(positions) > 0:
         pos_df = pd.DataFrame(list(positions),columns=positions[0]._asdict().keys())
-        pos_df.time = pd.to_datetime(pos_df.time, unit="s")
+        pos_df.time = pd.to_datetime(pos_df.time, unit="s").dt.tz_localize('UTC').dt.tz_convert(tz)
         pos_df.drop(['time_update', 'time_msc', 'time_update_msc', 'external_id'], axis=1, inplace=True)
         pos_df.type = np.where(pos_df.type==0,1,-1)
     else:
@@ -145,10 +186,10 @@ def trade_signal(data,l_s):
     ha_color = data.columns.to_list().index("color")
     
     if l_s == "":
-        if data.iloc[-2,hstgrm_index] > 0 and data.iloc[-2,buy_signal_index] == True  and\
+        if data.iloc[-2,hstgrm_index] > 0 and data.iloc[-3,hstgrm_index] > 0 and data.iloc[-2,buy_signal_index] == True  and\
             data.iloc[-2,signal_index] == 1 and data.iloc[-2,ha_color] == 'green': #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
             signal = "Buy"
-        elif data.iloc[-2,hstgrm_index] < 0 and data.iloc[-2,sell_signal_index] == True  and\
+        elif data.iloc[-2,hstgrm_index] < 0 and data.iloc[-3,hstgrm_index] < 0 and data.iloc[-2,sell_signal_index] == True  and\
             data.iloc[-2,signal_index] == -1 and data.iloc[-2,ha_color] == 'red':
             signal = "Sell"
             
@@ -180,32 +221,32 @@ def check_pnl_threshold():
 
 
 def main(symbol):
-    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe"].to_list()[0]
+    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
     
     try:
         # Single data fetch at beginning
-        data = get_hist_data_numeric_index(symbol, hist_timeframe)
+        data1 = get_hist_data_numeric_index(symbol, hist_timeframe)
         
         # Calculate all indicators once
-        ha_data = calculate_heikin_ashi(data)
-        data[['ha_open', 'ha_close', 'color']] = ha_data[['ha_open', 'ha_close', 'color']]
-        data[["macd","signal","histogram"]] = MACD(data)
-        data['trailing_stop'] = calculate_atr_trailing(data)
-        data['ema1'] = data['close'].ewm(span=1).mean()
-        data['buy_signal'] = (data['close'] > data['trailing_stop']) & (data['ema1'] > data['trailing_stop'])
-        data['sell_signal'] = (data['close'] < data['trailing_stop']) & (data['ema1'] < data['trailing_stop'])
-        data['zigzag'] = calculate_zigzag(data)
-        msb_lines = detect_msb(data, data['zigzag'])
-        data = generate_signals(data, msb_lines)
-        data['volatility'] = calculate_volatility(data, 34, 2.4)
-        data['sar'] = parabolic_sar(data)
-        current_sar = data.iloc[-1]['sar']
+        ha_data = calculate_heikin_ashi(data1)
+        data1[['ha_open', 'ha_close', 'color']] = ha_data[['ha_open', 'ha_close', 'color']]
+        data1[["macd","signalm","histogram"]] = MACD(data1)
+        data1['trailing_stop'] = calculate_atr_trailing(data1)
+        data1['ema1'] = data1['close'].ewm(span=1).mean()
+        data1['buy_signal'] = (data1['close'] > data1['trailing_stop']) & (data1['ema1'] > data1['trailing_stop'])
+        data1['sell_signal'] = (data1['close'] < data1['trailing_stop']) & (data1['ema1'] < data1['trailing_stop'])
+        data1['zigzag'] = calculate_zigzag(data1)
+        msb_lines = detect_msb(data1, data1['zigzag'])
+        data1 = generate_signals(data1, msb_lines)
+        data1['volatility'] = calculate_volatility(data1, 34, 2.4)
+        data1['sar'] = parabolic_sar(data1)
+        current_sar = data1.iloc[-1]['sar']
 
         open_pos = get_position_df()
         long_short = ""
         signal = ""
         pos_size = get_pos_size(symbol)
-        atr = data['volatility'] / get_pip(symbol)
+        atr = data1['volatility'] / get_pip(symbol)
         
         # Position management
         if len(open_pos) > 0:
@@ -241,25 +282,44 @@ def main(symbol):
 
         # Generate trading signal if no time-based exit
         if not signal:
-            signal = trade_signal(data, long_short)
+            signal = trade_signal(data1, long_short)
 
-        # Order execution logic
+
+        symbol_info = mt5.symbol_info(symbol)
+        if not symbol_info:
+            print(f"Symbol info not found for {symbol}")
+            return
+        
+        # Calculate minimum stop distance in pips
+        stops_level = symbol_info.stops_level if hasattr(symbol_info, 'stops_level') else 15
+        point = symbol_info.point
+        min_stop_pips = (stops_level * point) / get_pip(symbol)  # Convert to pips
+
+        # [Existing position management code...]
+
+        # Order execution logic with adjusted stop-loss
         if signal == "Buy":
-            Bsl_pips = data["open"].iloc[-1] - 1.5 * atr.iloc[-1]
-            Btp_pips = data["open"].iloc[-1] + 3.0 * atr.iloc[-1]
+            current_price = mt5.symbol_info_tick(symbol).ask
+            sl_pips = max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
+            Bsl_pips = current_price - sl_pips * get_pip(symbol)
+            Btp_pips = current_price + 3.0 * atr.iloc[-2] * get_pip(symbol)
             place_bracket_order(symbol, pos_size, signal, Bsl_pips, Btp_pips)
             # ... (rest of buy logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
 
+
         elif signal == "Sell":
-            Ssl_pips = data["open"].iloc[-1] + 1.5 * atr.iloc[-1]
-            Stp_pips = data["open"].iloc[-1] - 3.0 * atr.iloc[-1]
+            current_price = mt5.symbol_info_tick(symbol).bid
+            sl_pips = max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
+            Ssl_pips = current_price + sl_pips * get_pip(symbol)
+            Stp_pips = current_price - 3.0 * atr.iloc[-2] * get_pip(symbol)
             place_bracket_order(symbol, pos_size, signal, Ssl_pips, Stp_pips)
             # ... (rest of sell logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
 
+        # Order execution logic
         elif signal == "Close":
             # ... (existing close logic)
             result = close_position(symbol)
@@ -276,45 +336,105 @@ def main(symbol):
 
     except Exception as e:
         print(e)
-        send_email(f"At{dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} Error for {symbol}: {str(e)}")
+        send_email(f"At {dt.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")} Error for {symbol}: {str(e)}")
         #send_email("{}: Error received for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),symbol))
 
-# Continuous execution  
-tz = pytz.timezone("Europe/Kyiv") #MT5 server timezone      
-starttime=time.time()
-timeout = time.time() + 60*60*24*5  # Run from Monday 12:00 am to Friday 11:59 pm
-params["passthrough"] = 0
-while time.time() <= timeout and dt.datetime.now(tz=tz).weekday() in [0,1,2,3,4]: #weekday 0 is monday and 6 is sunday
-    try:
-        print("passthrough at ",time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
-        for symbol in symbols:
-            pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
-            tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
-            if (time.time() - starttime) // 14400 == pt and tf =="TIMEFRAME_H4":
-                print("starting passthrough for: ",symbol)
-                main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1
-            elif (time.time() - starttime) // 3600 == pt and tf =="TIMEFRAME_H1":
-                print("starting passthrough for: ",symbol)
-                main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1
-            elif (time.time() - starttime) // 1800 == pt and tf =="TIMEFRAME_M30":
-                print("starting passthrough for: ",symbol)
-                main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1 
-            elif (time.time() - starttime) // 900 == pt and tf =="TIMEFRAME_M15":
-                print("starting passthrough for: ",symbol)
-                main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1
-            elif (time.time() - starttime) // 300 == pt and tf =="TIMEFRAME_M5":
-                print("starting passthrough for: ",symbol)
-                main(symbol)
-                params.loc[params.Symbol==symbol,"passthrough"] +=1 
-        if check_pnl_threshold():
-            mt5.shutdown()
-            break
-        time.sleep(1800 - ((time.time() - starttime) % 1800.0)) # 30 minute interval between each new execution
-    except KeyboardInterrupt:
-        print('\n\nKeyboard exception received. Exiting.')
-        exit()
-        
+"""
+if __name__ == "__main__":
+    # Continuous execution  
+    tz = pytz.timezone("Europe/Kyiv")  
+    starttime = time.time()
+    timeout = time.time() + 60*60*24*5  
+    params["passthrough"] = 0
+    
+    while time.time() <= timeout and dt.datetime.now(tz=tz).weekday() in [0,1,2,3,4]:
+        try:
+            # Get current timestamp at loop start
+            current_time = time.time()  # <-- NEW: Track current time
+            
+            print("passthrough at ", time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time)))
+            
+            for symbol in symbols:
+                pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
+                tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+                
+                # Calculate interval based on timeframe
+                interval = {
+                    "TIMEFRAME_H4": 14400,
+                    "TIMEFRAME_H1": 3600,
+                    "TIMEFRAME_M30": 1800,
+                    "TIMEFRAME_M15": 900,
+                    "TIMEFRAME_M5": 300
+                }[tf]  # <-- NEW: Dynamic interval mapping
+                
+                # Check if enough time has passed since last execution
+                if (current_time - starttime) // interval == pt:  # <-- Uses current_time instead of time.time()
+                    print(f"starting passthrough for: {symbol}")
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1
+            
+            if check_pnl_threshold():
+                mt5.shutdown()
+                break
+                
+            # Align sleep to next 15-minute mark (wall-clock time)
+            sleep_time = 900 - (current_time % 900)  # <-- FIX: Use current_time, not elapsed
+            print(f"Sleeping for {sleep_time} seconds")
+            time.sleep(sleep_time)  # <-- Now perfectly aligns to :00, :15, :30, :45
+            
+        except KeyboardInterrupt:
+            print('\n\nKeyboard exception received. Exiting.')
+            exit()
+"""
+
+if __name__ == "__main__":
+    # Continuous execution  
+    tz = pytz.timezone("Europe/Kyiv")  
+    starttime = time.time()
+    timeout = time.time() + 60*60*24*5  
+    params["passthrough"] = 0
+    
+    while time.time() <= timeout and dt.datetime.now(tz=tz).weekday() in [0,1,2,3,4]:
+        try:
+            print("passthrough at ",time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
+            current_time = time.time()  # <-- NEW LINE 1: Capture current timestamp
+            
+            for symbol in symbols:
+                pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
+                tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+                
+                # CHANGED LINE: Use current_time instead of time.time() in calculations
+                elapsed_since_start = current_time - starttime  
+                
+                if (elapsed_since_start) // 14400 == pt and tf =="TIMEFRAME_H4":
+                    print("starting passthrough for: ",symbol)
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1
+                elif (elapsed_since_start) // 3600 == pt and tf =="TIMEFRAME_H1":
+                    print("starting passthrough for: ",symbol)
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1
+                elif (elapsed_since_start) // 1800 == pt and tf =="TIMEFRAME_M30":
+                    print("starting passthrough for: ",symbol)
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1 
+                elif (elapsed_since_start) // 900 == pt and tf =="TIMEFRAME_M15":
+                    print("starting passthrough for: ",symbol)
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1
+                elif (elapsed_since_start) // 300 == pt and tf =="TIMEFRAME_M5":
+                    print("starting passthrough for: ",symbol)
+                    main(symbol)
+                    params.loc[params.Symbol==symbol,"passthrough"] +=1 
+            
+            if check_pnl_threshold():
+                mt5.shutdown()
+                break
+                
+            # CHANGED LINE 2: Align sleep to wall-clock 15-minute marks
+            time.sleep(900 - (current_time % 900))  # Exact 15-minute alignment
+
+        except KeyboardInterrupt:
+            print('\n\nKeyboard exception received. Exiting.')
+            exit()
+
