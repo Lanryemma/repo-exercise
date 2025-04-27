@@ -216,9 +216,9 @@ if __name__ == "__main__":
     # ======================
     # STRATEGY CONFIGURATION
     # ======================
-    symbol = "GBPUSD"
-    TIMEFRAME = "TIMEFRAME_H1"
-    BARS_TO_FETCH = 10000
+    symbol = "AUDCHF"
+    TIMEFRAME = "TIMEFRAME_M15"
+    BARS_TO_FETCH = 36000
     
     # Indicator parameters
     DEMA_PERIOD = 40     # Double EMA period (original: 30)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
                                 short_thresh=SHORT_THRESH)
         data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-        data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+        data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
         
         signal = None
         data["returns"] = 0.0
