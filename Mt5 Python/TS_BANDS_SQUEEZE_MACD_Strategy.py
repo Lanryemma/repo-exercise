@@ -77,8 +77,78 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
 # Calculate technical components
-def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
-    df = DF.copy()
+def calculate_heikin_ashi(df):
+    ha = df.copy()
+    
+    # Initialize columns
+    ha['ha_close'] = (ha['open'] + ha['high'] + ha['low'] + ha['close']) / 4
+    ha['ha_open'] = (ha['open'].shift(1) + ha['close'].shift(1)) / 2
+    ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
+    ha['ha_low'] = ha[['low', 'ha_open', 'ha_close']].min(axis=1)
+    
+    ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
+    return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+
+# ======================
+# BOLLINGER BANDS INDICATOR
+# ======================
+
+def calculate_bollinger_bands(df, period=46, std_dev=0.35):
+    df = df.copy()
+    """
+    Calculate Bollinger Bands
+    Args:
+        df: DataFrame with price data
+        period: MA period (default 46)
+        std_dev: Standard deviation multiplier (default 0.35)
+    Returns:
+        DataFrame with added BB columns
+    """
+    df['basis'] = df['close'].rolling(window=period).mean()
+    df['std_dev'] = df['close'].rolling(window=period).std() * std_dev
+    df['upper_band'] = df['basis'] + df['std_dev']
+    df['lower_band'] = df['basis'] - df['std_dev']
+    return df
+
+# ======================
+# SIGNAL GENERATION
+# ======================
+
+def generate_signals1(df):
+    """
+    Generate trading signals based on Bollinger Bands
+    Rules:
+        1: Close crosses above upper band (current > upper & previous <= upper)
+        -1: Close crosses below lower band (current < lower & previous >= lower)
+    """
+    df['signal1'] = 0
+    
+    # Bullish signal condition
+    bullish_cond = (
+        (df['close'] > df['upper_band']) #& 
+        #(df['close'].shift(1) <= df['upper_band'].shift(1))
+    )
+    
+    # Bearish signal condition
+    bearish_cond = (
+        (df['close'] < df['lower_band']) #& 
+        #(df['close'].shift(1) >= df['lower_band'].shift(1))
+        )
+    
+    df.loc[bullish_cond, 'signal1'] = 1
+    df.loc[bearish_cond, 'signal1'] = -1
+    
+    return df
+# ======================
+# SQUEEZE MOMENTUM INDICATOR
+# ======================
+
+def calculate_squeeze(df, bb_length=20, kc_length=20, bb_mult=2.0, kc_mult=1.5):
+    df = df.copy()
+    """
+    Calculate Squeeze Momentum Indicator
+    Returns DataFrame with 'histogram' and 'signal' columns
+    """
     # Calculate True Range
     df['prev_close'] = df['close'].shift(1)
     df['tr'] = np.maximum(
@@ -87,72 +157,69 @@ def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
         np.abs(df['low'] - df['prev_close'])
     )
     
-    # Calculate ATR
-    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
+    # Bollinger Bands
+    df['bb_ma'] = df['close'].rolling(bb_length).mean()
+    df['bb_std'] = df['close'].rolling(bb_length).std()
+    df['upper_bb'] = df['bb_ma'] + bb_mult * df['bb_std']
+    df['lower_bb'] = df['bb_ma'] - bb_mult * df['bb_std']
     
-    # Calculate price mean (simplified EMA)
-    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    # Keltner Channels
+    df['kc_ma'] = df['close'].rolling(kc_length).mean()
+    df['kc_atr'] = df['tr'].rolling(kc_length).mean()
+    df['upper_kc'] = df['kc_ma'] + kc_mult * df['kc_atr']
+    df['lower_kc'] = df['kc_ma'] - kc_mult * df['kc_atr']
     
-    return df.dropna()
-
-# Generate MDX signals
-def generate_mdx_signals(df):
-    # Calculate price deviation from mean
-    df['deviation'] = df['close'] - df['price_mean']
+    # Squeeze Momentum Calculation
+    df['highest_high'] = df['high'].rolling(kc_length).max()
+    df['lowest_low'] = df['low'].rolling(kc_length).min()
+    df['midpoint'] = (df['highest_high'] + df['lowest_low'] + df['close'].rolling(kc_length).mean()) / 3
+    df['momentum'] = df['close'] - df['midpoint']
     
-    # Calculate MDX values
-    df['mdx'] = np.where(
-        df['deviation'] > 0,
-        np.maximum(df['deviation'] - df['atr'], 0),
-        np.minimum(df['deviation'] + df['atr'], 0)
-    )
+    # Linear Regression (5-period)
+    def linear_regression(window):
+        x = np.arange(len(window))
+        y = window.values
+        slope = (len(x) * np.sum(x*y) - np.sum(x)*np.sum(y)) / (len(x)*np.sum(x**2) - (np.sum(x))**2)
+        return slope * len(window)  # Magnitude adjustment
     
-    # Generate signals (1 for buy, -1 for sell)
-    df['signal1'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
-    df['signal1'] = df['signal1'].replace(0, method='ffill')  # Carry forward signals
-    
-    return df
-
-# Calculate rotation factor scores
-def calculate_pvi_nvi(df, ema_length=255, sig_length=25):
-    df = df.copy()
-    df['pvi'] = 1.0
-    df['nvi'] = 1.0
-    
-    # Calculate PVI/NVI
-    for i in range(1, len(df)):
-        vol_change = df['volume'].iloc[i] - df['volume'].iloc[i-1]
-        price_change = (df['close'].iloc[i] - df['close'].iloc[i-1]) / df['close'].iloc[i-1]
-        
-        if vol_change > 0:
-            df['pvi'].iloc[i] = df['pvi'].iloc[i-1] * (1 + price_change)
-        else:
-            df['pvi'].iloc[i] = df['pvi'].iloc[i-1]
-            
-        if vol_change < 0:
-            df['nvi'].iloc[i] = df['nvi'].iloc[i-1] * (1 + price_change)
-        else:
-            df['nvi'].iloc[i] = df['nvi'].iloc[i-1]
-    
-    # Calculate EMAs
-    df['pvi_ema'] = df['pvi'].ewm(span=ema_length, adjust=False).mean()
-    df['nvi_ema'] = df['nvi'].ewm(span=ema_length, adjust=False).mean()
-    
-    # Calculate PNI and Signal
-    df['pni'] = (df['pvi'] - df['pvi_ema']) - (df['nvi'] - df['nvi_ema'])
-    df['signal_line'] = df['pni'].ewm(span=sig_length, adjust=False).mean()
-    
-    # Generate Signals
-    df['signal2'] = 0
-    df['signal2'] = np.where(
-        (df['pni'] > 0) & (df['pni'] > df['signal_line']), 1,
-        np.where(
-            (df['pni'] < 0) & (df['pni'] < df['signal_line']), -1, 0
-        )
-    )
+    df['histogram'] = df['momentum'].rolling(5).apply(linear_regression, raw=False)
     
     return df
 
+# ======================
+# SIGNAL GENERATION
+# ======================
+
+def generate_signals2(df):
+    """Generate trading signals based on histogram position"""
+    df['signal2'] = np.where(df['histogram'] > 0, 1, -1)
+    return df 
+
+
+# ======================
+# MACD HISTOGRAM CALCULATION
+# ======================
+
+def calculate_macd_histogram(df, fast=12, slow=26, signal=9):
+    """
+    Calculate MACD Histogram with pandas
+    Returns DataFrame with MACD components and histogram
+    """
+    df['fast_ema'] = df['close'].ewm(span=fast, adjust=False).mean()
+    df['slow_ema'] = df['close'].ewm(span=slow, adjust=False).mean()
+    df['macd'] = df['fast_ema'] - df['slow_ema']
+    df['signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
+    df['histogram'] = df['macd'] - df['signal']
+    return df
+
+# ======================
+# SIGNAL GENERATION
+# ======================
+
+def generate_signals3(df):
+    """Generate trading signals based on histogram position"""
+    df['signal3'] = np.where(df['histogram'] > 0, 1, -1)
+    return df
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -237,22 +304,19 @@ def is_session_active(timestamp, session):
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "NZDUSD"
+    symbol = "EURUSD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
+    result1 = calculate_macd_histogram(data, fast=12, slow=26, signal=9)# for 1
     data = data.dropna().copy()
     
     # Calculate indicator
-    #results = calculate_regression_indicator(data)
-    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result1 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result1 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
-    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
-    result2 = calculate_pvi_nvi(data, ema_length=200, sig_length=20)  # 200 bars ≈ 2 days
-    #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
-    result3 = generate_mdx_signals(result1)
+    result2 = calculate_bollinger_bands(data, period=28, std_dev=2.0)
+    result3 = calculate_squeeze(data, bb_length=20, kc_length=14, bb_mult=1.8, kc_mult=1.5)
+    result4 = generate_signals1(result2)
+    result5 = generate_signals2(result3)
+    result6 = generate_signals3(result1)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
@@ -263,8 +327,9 @@ if __name__ == "__main__":
     data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
     data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
     data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
-    data['signal1'] = result3['signal1']
-    data['signal2'] = result2['signal2']
+    data['signal1'] = result4['signal1']
+    data['signal2'] = result5['signal2']
+    data['signal3'] = result6['signal3']
     # data['bear_signal'] = result2['bear_signal']
     # data['bear_signal+'] = result2['bear_signal+']
     # data['sell_signal2'] = data2['sell_signal2']
@@ -282,7 +347,7 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
@@ -305,7 +370,7 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
+            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['signal3']==-1)#(data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
