@@ -279,7 +279,7 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
     symbol = "EURJPY"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 35040
+    num_candles = 9040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
@@ -428,6 +428,8 @@ if __name__ == "__main__":
 
 
     #print backtesting results
+    retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
+    print(retun)
     print("cumulative return in pips = ",data["returns"].cumsum().iloc[-1])
     print("win rate of the strategy = {:.2f}%".format(win_rate(trade_stats)))
     print("average pip return per winning trade = {:.2f}".format(mean_ret_winner_pip(trade_stats, symbol)))
