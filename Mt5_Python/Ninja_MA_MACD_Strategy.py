@@ -9,7 +9,6 @@ from pandas import Series
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
-
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -22,8 +21,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
-#file_path = r"C:\Users\user\Documents\LANRE\Desktop\FRONTEND\Mt5 Python\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -33,10 +31,11 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
     print("connection not established")
 else:
     print("connection established")
-
-
-# Get price data
 #______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#TECHNICAL INDICATOR WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
+
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
@@ -76,78 +75,44 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
+def MACD_signals (df,fl=12,sl=26,sm=9):
+    data = df.copy()
+    # Calculate MACD
+    data['fast_ema'] = data['close'].ewm(span=fl).mean()
+    data['slow_ema'] = data['close'].ewm(span=sl).mean()
+    data['macd'] = data['fast_ema'] - data['slow_ema']
+    data['signal'] = data['macd'].ewm(span=sm).mean()
+    data['hist'] = data['macd'] - data['signal']
+    data['signal_output'] = np.where(data['hist'] >= 0, 1, -1)
+    return data
 
-def calculate_regression_indicator(DF, length=400, norm_length=100, signal_length=50):
+def calculate_signals(DF):
     df = DF.copy()
-    """Calculate normalized regression indicator"""
-    # Linear regression calculations
-    def rolling_regression(window):
-        x = np.arange(1, len(window)+1)
-        y = window.values
-        slope = (len(x)*np.sum(x*y) - np.sum(x)*np.sum(y)) / (len(x)*np.sum(x**2) - (np.sum(x))**2)
-        intercept = (np.sum(y) - slope*np.sum(x)) / len(x)
-        return intercept + slope  # Return regression line value
-    
-    # Calculate regression line
-    df['regression_line'] = df['close'].rolling(length).apply(rolling_regression, raw=False)
-    
-    # Calculate distance from regression line
-    df['distance'] = df['close'] - df['regression_line']
-    
-    # Normalize distance
-    df['distance_norm'] = (df['distance'] - df['distance'].rolling(norm_length).mean()) 
-    df['distance_norm'] /= df['distance'].rolling(norm_length).std()
-    df['indicator'] = df['distance_norm'].rolling(10).mean()
+    # Calculate EMAs
+    df['ma1'] = df['close'].ewm(span=21, adjust=False).mean()
+    df['ma2'] = df['close'].ewm(span=55, adjust=False).mean()
+    df['ma3'] = df['close'].ewm(span=233, adjust=False).mean()
     
     # Generate signals
-    # df['signal'] = np.where(df['indicator'] > 0, 1, 0)
-    # df['signal'] = df['signal'].diff()  # 1 for cross above, -1 for cross below
-    df['state'] = np.where(df['indicator'] > 0, 1, -1)
-    
+    df['signal_ma'] = 0
+    # df['signal_ma'] = np.where((df['ma1'] > df['ma2']) & (df['ma2'] > df['ma3']), 1,
+    #                     np.where((df['ma1'] < df['ma2']) & (df['ma2'] < df['ma3']), -1, 0))
+    df['signal_ma'] = np.where((df['ma1'] > df['ma3']), 1,
+                            np.where((df['ma1'] < df['ma3']), -1, 0))
     return df
 
-
-def gaussian_weights(length, sigma=10):
-    """Generate Gaussian weights"""
-    x = np.arange(length)
-    weights = np.exp(-0.5 * ((x - length/2) / sigma)**2)
-    return weights / weights.sum()
-
-def calculate_bands(DF, length=20, distance=2.0, vol_period=100):
+def add_rsi(DF, period=14):
     df = DF.copy()
-    """Calculate volatility Gaussian bands"""
-    # Gaussian filter
-    weights = gaussian_weights(length)
-    df['gaussian'] = df['close'].rolling(length).apply(
-        lambda x: np.dot(x, weights), raw=True
-    )
-    
-    # Volatility calculation
-    df['volatility'] = (df['high'] - df['low']).rolling(vol_period).mean()
-    
-    # Bands calculation
-    df['upper_band'] = df['gaussian'] + df['volatility'] * distance
-    df['lower_band'] = df['gaussian'] - df['volatility'] * distance
-    
-    # Trend score
-    df['score'] = np.where(df['close'] > df['upper_band'], 1.0,
-                        np.where(df['close'] < df['lower_band'], 0.0, np.nan))
-    df['score'].ffill(inplace=True)
-    
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+    rs = avg_gain / avg_loss
+    df['rsi'] = 100 - (100 / (1 + rs))
     return df
 
-def generate_signals(DF):
-    df = DF.copy()
-    """Generate trading signals"""
-    df['bull_signal'] = np.where(
-        (df['close'] > df['upper_band']) | (df['score'] > 0.5), 1, 0)
-    df['bear_signal'] = np.where(
-        (df['close'] < df['lower_band']) | (df['score'] < 0.5), -1, 0)
-    df['bull_signal+'] = np.where(
-        (df['close'] > df['upper_band']) & (df['score'] > 0.5), 1, 0)
-    df['bear_signal+'] = np.where(
-        (df['close'] < df['lower_band']) & (df['score'] < 0.5), -1, 0)
-    return df
+
 
 def calculate_volatility(DF, length, mult):
             df = DF.copy()
@@ -163,7 +128,7 @@ def calculate_volatility(DF, length, mult):
             # Calculate volatility bands
             return df['atr'] * mult
 
-def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
+def parabolic_sar(df, step=0.04, max_step=0.3):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -208,32 +173,34 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
             df['sar'] = sar
         return df['sar']
 
+
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "GBPUSD"
+    symbol = "XAUUSD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
-    data = data.dropna().copy()
+    data['200_ema'] = data['close'].ewm(span=200, adjust=False).mean()
     
     # Calculate indicator
     #results = calculate_regression_indicator(data)
-    result1 = calculate_bands(data, length=80, distance=1.5)  # 80 bars ≈ 20 hours
-    results = calculate_regression_indicator(data, length=200)  # 200 bars ≈ 2 days
-    #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
-    result2 = generate_signals(result1)
+    result1 = MACD_signals (data,fl=12,sl=26,sm=9)
+    result2 = calculate_signals(data)
+    result3 = add_rsi(data, period=14)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
     
-    data['bull_signal'] = result2['bull_signal']
-    data['bull_signal+'] = result2['bull_signal+']
-    data['bear_signal'] = result2['bear_signal']
-    data['bear_signal+'] = result2['bear_signal+']
-    data['state'] = results['state']
-    # data['sell_signal2'] = data2['sell_signal2']
-    # data['buy_signal3'] = data3['buy_signal3']
+    data['trend_direction'] = np.where(data['close'] > data['200_ema'], 1, -1)
+    
+    data['signal_output'] = result1['signal_output']
+    data['signal_ma'] = result2['signal_ma']
+    data['rsi'] = result3['rsi']
+    # data['bear_signal'] = result2['bear_signal']
+    # data['bear_signal+'] = result2['bear_signal+']
+    # data['state'] = results['state']
+    data = data.dropna().copy()
     
     signal = None
     data["returns"] = 0.0
@@ -245,20 +212,21 @@ if __name__ == "__main__":
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
-        
         if signal == None:
-            if (data.iloc[i]['bull_signal+'] and data.iloc[i]['state']==1
+            if (data.iloc[i]['signal_output']==1 and\
+                data.iloc[i]['signal_ma']==1 and\
+                    (data.iloc[i]['close'] > data.iloc[i]['open']) and data.iloc[i]['rsi'] < 65
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    # sl_pips = 1.5 * atr  # 1.5x ATR
-                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # Scale ratios inversely with volatility
-                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -270,17 +238,19 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif (data.iloc[i]['bear_signal+'] and data.iloc[i]['state']==-1
+            elif (data.iloc[i]['signal_output']==-1 and\
+                data.iloc[i]['signal_ma']==-1 and\
+                    (data.iloc[i]['close'] < data.iloc[i]['open']) and data.iloc[i]['rsi'] > 35
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    # sl_pips = 1.5 * atr  # 1.5x ATR
-                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # Scale ratios inversely with volatility
-                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -294,7 +264,14 @@ if __name__ == "__main__":
                             
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            if timeframe == "TIMEFRAME_M5":
+                max_hold_bars = 96*3 #24 hours for M5
+            elif timeframe == "TIMEFRAME_M15":
+                max_hold_bars = 96 #24 hours for M15
+            elif timeframe == "TIMEFRAME_M30":
+                max_hold_bars = 48 #24 hours for M30
+            elif timeframe == "TIMEFRAME_H1":
+                max_hold_bars = 24 # 24 hours for H1
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -316,7 +293,14 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            if timeframe == "TIMEFRAME_M5":
+                max_hold_bars = 96*3 #24 hours for M5
+            elif timeframe == "TIMEFRAME_M15":
+                max_hold_bars = 96 #24 hours for M15
+            elif timeframe == "TIMEFRAME_M30":
+                max_hold_bars = 48 #24 hours for M30
+            elif timeframe == "TIMEFRAME_H1":
+                max_hold_bars = 24 # 24 hours for H1
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None

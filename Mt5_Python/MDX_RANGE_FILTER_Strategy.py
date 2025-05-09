@@ -21,7 +21,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -77,6 +77,7 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
 # Calculate technical components
+
 def calculate_heikin_ashi(df):
     ha = df.copy()
     
@@ -89,66 +90,115 @@ def calculate_heikin_ashi(df):
     ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
     return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
 
-# ======================
-# BOLLINGER BANDS INDICATOR
-# ======================
 
-def calculate_bollinger_bands(df, period=46, std_dev=0.35):
-    df = df.copy()
-    """
-    Calculate Bollinger Bands
-    Args:
-        df: DataFrame with price data
-        period: MA period (default 46)
-        std_dev: Standard deviation multiplier (default 0.35)
-    Returns:
-        DataFrame with added BB columns
-    """
-    df['basis'] = df['close'].rolling(window=period).mean()
-    df['std_dev'] = df['close'].rolling(window=period).std() * std_dev
-    df['upper_band'] = df['basis'] + df['std_dev']
-    df['lower_band'] = df['basis'] - df['std_dev']
+# 2. Range Filter Indicator Calculation ---------------------------------------
+
+def calculate_range_filter(DF, sampling_period=100, range_multiplier=3.0):
+    df = DF.copy()
+    
+    # Calculate Range Filter values
+    # df = DataFrame with 'close' price column
+    
+    # Calculate smooth average range
+    df['price_diff'] = np.abs(df['close'] - df['close'].shift(1))
+    df['avrng'] = df['price_diff'].ewm(span=sampling_period, adjust=False).mean()
+    wper = sampling_period * 2 - 1
+    df['smrng'] = df['avrng'].ewm(span=wper, adjust=False).mean() * range_multiplier
+    
+    # Calculate range filter
+    filt = [df['close'].iloc[0]] * len(df)
+    for i in range(1, len(df)):
+        prev_filt = filt[i-1]
+        close = df['close'].iloc[i]
+        smrng = df['smrng'].iloc[i]
+        
+        if close > prev_filt:
+            filt[i] = max(prev_filt, close - smrng)
+        else:
+            filt[i] = min(prev_filt, close + smrng)
+    
+    df['filt'] = filt
+    df['hband'] = df['filt'] + df['smrng']
+    df['lband'] = df['filt'] - df['smrng']
     return df
+"""
+def calculate_atr(df, period=14):
+    #Calculate Average True Range (ATR) with forward-fill
+    # Use raw prices for TR calculation
+    df['tr1'] = df['high'] - df['low']
+    df['tr2'] = np.abs(df['high'] - df['close'].shift())
+    df['tr3'] = np.abs(df['low'] - df['close'].shift())
+    
+    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
+    df['ATR'] = df['tr'].rolling(period).mean().ffill()  # Forward-fill NaN values
+    return df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1)
 
-# ======================
-# SIGNAL GENERATION
-# ======================
+def calculate_trailing_stop(df, atr_multiplier=2.0):
+    #Fixed trailing stop implementation
+    close = df['ha_close'].values
+    atr = df['ATR'].ffill().values  # Ensure no NaNs
+    
+    ts = np.zeros(len(close))
+    ts[0] = close[0]  # Initialize with first close
+    
+    for i in range(1, len(close)):
+        current_atr = atr[i] * atr_multiplier
+        prev_ts = ts[i-1]
+        
+        if close[i] > prev_ts:
+            ts[i] = max(prev_ts, close[i] - current_atr)
+        else:
+            ts[i] = min(prev_ts, close[i] + current_atr)
+    
+    df['TrailingStop'] = ts
+    return df
+"""
+# 3. Signal Generation --------------------------------------------------------
 
 def generate_signals1(df):
-    """
-    Generate trading signals based on Bollinger Bands
-    Rules:
-        1: Close crosses above upper band (current > upper & previous <= upper)
-        -1: Close crosses below lower band (current < lower & previous >= lower)
-    """
-    df['signal1'] = 0
     
-    # Bullish signal condition
-    bullish_cond = (
-        (df['close'] > df['upper_band']) #& 
-        #(df['close'].shift(1) <= df['upper_band'].shift(1))
+    # Generate buy/sell signals based on Range Filter
+    # Returns DataFrame with 'signal' column
+    
+    df['upward'] = (df['filt'] > df['filt'].shift(1)).astype(int)
+    df['downward'] = (df['filt'] < df['filt'].shift(1)).astype(int)
+    
+    # Signal conditions
+    long_condition = (
+        (df['close'] > df['filt']) & 
+        ((df['close'] > df['close'].shift(1)) | (df['upward'] > 0))
     )
-    
-    # Bearish signal condition
-    bearish_cond = (
-        (df['close'] < df['lower_band']) #& 
-        #(df['close'].shift(1) >= df['lower_band'].shift(1))
-        )
-    
-    df.loc[bullish_cond, 'signal1'] = 1
-    df.loc[bearish_cond, 'signal1'] = -1
-    
+    short_condition = (
+        (df['close'] < df['filt']) & 
+        ((df['close'] < df['close'].shift(1)) | (df['downward'] > 0))
+    )
+    # Create signals
+    df['signal1'] = np.where(long_condition, 'buy', 
+                        np.where(short_condition, 'sell', None))
     return df
-# ======================
-# SQUEEZE MOMENTUM INDICATOR
-# ======================
+"""
 
-def calculate_squeeze(df, bb_length=20, kc_length=20, bb_mult=2.0, kc_mult=1.5):
-    df = df.copy()
-    """
-    Calculate Squeeze Momentum Indicator
-    Returns DataFrame with 'histogram' and 'signal' columns
-    """
+def generate_signals2(df, ema_period=1):  # Changed from 1 to 3 for better filtering
+    #Simplified signal generation
+    df['EMA'] = df['ha_close'].ewm(span=ema_period).mean()
+    
+    # Basic crossover logic
+    df['signal1'] = np.where(
+        (df['ha_close'] > df['TrailingStop']) & 
+        (df['ha_close'].shift() <= df['TrailingStop'].shift()),
+        'buy',
+        np.where(
+            (df['ha_close'] < df['TrailingStop']) & 
+            (df['ha_close'].shift() >= df['TrailingStop'].shift()),
+            'sell',
+            None
+        )
+    )
+    return df
+"""
+# Calculate technical components
+def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
+    df = DF.copy()
     # Calculate True Range
     df['prev_close'] = df['close'].shift(1)
     df['tr'] = np.maximum(
@@ -157,68 +207,30 @@ def calculate_squeeze(df, bb_length=20, kc_length=20, bb_mult=2.0, kc_mult=1.5):
         np.abs(df['low'] - df['prev_close'])
     )
     
-    # Bollinger Bands
-    df['bb_ma'] = df['close'].rolling(bb_length).mean()
-    df['bb_std'] = df['close'].rolling(bb_length).std()
-    df['upper_bb'] = df['bb_ma'] + bb_mult * df['bb_std']
-    df['lower_bb'] = df['bb_ma'] - bb_mult * df['bb_std']
+    # Calculate ATR
+    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
     
-    # Keltner Channels
-    df['kc_ma'] = df['close'].rolling(kc_length).mean()
-    df['kc_atr'] = df['tr'].rolling(kc_length).mean()
-    df['upper_kc'] = df['kc_ma'] + kc_mult * df['kc_atr']
-    df['lower_kc'] = df['kc_ma'] - kc_mult * df['kc_atr']
+    # Calculate price mean (simplified EMA)
+    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
     
-    # Squeeze Momentum Calculation
-    df['highest_high'] = df['high'].rolling(kc_length).max()
-    df['lowest_low'] = df['low'].rolling(kc_length).min()
-    df['midpoint'] = (df['highest_high'] + df['lowest_low'] + df['close'].rolling(kc_length).mean()) / 3
-    df['momentum'] = df['close'] - df['midpoint']
+    return df.dropna()
+
+# Generate MDX signals
+def generate_mdx_signals(df):
+    # Calculate price deviation from mean
+    df['deviation'] = df['close'] - df['price_mean']
     
-    # Linear Regression (5-period)
-    def linear_regression(window):
-        x = np.arange(len(window))
-        y = window.values
-        slope = (len(x) * np.sum(x*y) - np.sum(x)*np.sum(y)) / (len(x)*np.sum(x**2) - (np.sum(x))**2)
-        return slope * len(window)  # Magnitude adjustment
+    # Calculate MDX values
+    df['mdx'] = np.where(
+        df['deviation'] > 0,
+        np.maximum(df['deviation'] - df['atr'], 0),
+        np.minimum(df['deviation'] + df['atr'], 0)
+    )
     
-    df['histogram'] = df['momentum'].rolling(5).apply(linear_regression, raw=False)
+    # Generate signals (1 for buy, -1 for sell)
+    df['signal2'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
+    df['signal2'] = df['signal2'].replace(0, method='ffill')  # Carry forward signals
     
-    return df
-
-# ======================
-# SIGNAL GENERATION
-# ======================
-
-def generate_signals2(df):
-    """Generate trading signals based on histogram position"""
-    df['signal2'] = np.where(df['histogram'] > 0, 1, -1)
-    return df 
-
-
-# ======================
-# MACD HISTOGRAM CALCULATION
-# ======================
-
-def calculate_macd_histogram(df, fast=12, slow=26, signal=9):
-    """
-    Calculate MACD Histogram with pandas
-    Returns DataFrame with MACD components and histogram
-    """
-    df['fast_ema'] = df['close'].ewm(span=fast, adjust=False).mean()
-    df['slow_ema'] = df['close'].ewm(span=slow, adjust=False).mean()
-    df['macd'] = df['fast_ema'] - df['slow_ema']
-    df['signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
-    df['histogram'] = df['macd'] - df['signal']
-    return df
-
-# ======================
-# SIGNAL GENERATION
-# ======================
-
-def generate_signals3(df):
-    """Generate trading signals based on histogram position"""
-    df['signal3'] = np.where(df['histogram'] > 0, 1, -1)
     return df
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
@@ -304,19 +316,31 @@ def is_session_active(timestamp, session):
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "EURUSD"
+    symbol = "USDCAD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
-    result1 = calculate_macd_histogram(data, fast=12, slow=26, signal=9)# for 1
+    ha_data = calculate_heikin_ashi(data)
+    data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
     
     # Calculate indicator
-    result2 = calculate_bollinger_bands(data, period=28, std_dev=2.0)
-    result3 = calculate_squeeze(data, bb_length=20, kc_length=14, bb_mult=1.8, kc_mult=1.5)
-    result4 = generate_signals1(result2)
-    result5 = generate_signals2(result3)
-    result6 = generate_signals3(result1)
+    #result2 = calculate_range_filter(data, sampling_period=100, range_multiplier=3.0)#for 5 minutes
+    result2 = calculate_range_filter(data, sampling_period=75, range_multiplier=2.8)#for 15 minutes
+    #result2 = calculate_range_filter(data, sampling_period=50, range_multiplier=2.5)#for 30 minutes
+    #result2 = calculate_range_filter(data, sampling_period=30, range_multiplier=2.2)#for 5 minutes
+    
+    #result1 = calculate_atr(data, period=14) #for 15 minutes | "20" for 30 minutes | "25" for 1 hour
+    #result2 = calculate_trailing_stop(result1, atr_multiplier=2.0) #for 15 minutes | "2.5" for 30 minutes | "3.0" for 1 hour
+    
+    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
+    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
+    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
+    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
+    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
+    
+    result4 = generate_signals1(result2) 
+    result5 = generate_mdx_signals(result3)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
@@ -329,7 +353,6 @@ if __name__ == "__main__":
     data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
     data['signal1'] = result4['signal1']
     data['signal2'] = result5['signal2']
-    data['signal3'] = result6['signal3']
     # data['bear_signal'] = result2['bear_signal']
     # data['bear_signal+'] = result2['bear_signal+']
     # data['sell_signal2'] = data2['sell_signal2']
@@ -347,7 +370,7 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+            if ((data.iloc[i]['signal1']=='buy')  &  (data.iloc[i]['signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
@@ -370,7 +393,7 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['signal3']==-1)#(data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
+            elif ((data.iloc[i]['signal1']=='sell')  &  (data.iloc[i]['signal2']==-1)#(data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips

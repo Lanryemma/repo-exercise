@@ -9,7 +9,6 @@ from pandas import Series
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
-
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -22,8 +21,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
-#file_path = r"C:\Users\user\Documents\LANRE\Desktop\FRONTEND\Mt5 Python\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -33,10 +31,11 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
     print("connection not established")
 else:
     print("connection established")
-
-
-# Get price data
 #______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#TECHNICAL INDICATOR WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
+
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
@@ -72,179 +71,128 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
-
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
-def calculate_heikin_ashi(df):
-    ha = df.copy()
-    
-    # Heikin-Ashi Close
-    ha['ha_close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-    # Heikin-Ashi Open
-    ha['ha_open'] = 0.0
-    ha['ha_open'].iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-    ha['ha_open'] = (ha['ha_open'].shift(1) + ha['ha_close'].shift(1)) / 2
-    # Heikin-Ashi High/Low
-    ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
-    ha['ha_low'] = ha[['low', 'ha_open', 'ha_close']].min(axis=1)
-    
-    ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
-    return ha[['ha_open', 'ha_close', 'color']]
-
-def t3ma(series, length, vol_factor):
-    """Calculate T3 Moving Average"""
-    # Calculate multiple EMAs
-    e1 = series.ewm(span=length, adjust=False).mean()
-    e2 = e1.ewm(span=length, adjust=False).mean()
-    e3 = e2.ewm(span=length, adjust=False).mean()
-    e4 = e3.ewm(span=length, adjust=False).mean()
-    e5 = e4.ewm(span=length, adjust=False).mean()
-    e6 = e5.ewm(span=length, adjust=False).mean()
-    
-    # Calculate coefficients
-    b = vol_factor
-    c1 = -b**3
-    c2 = 3*b**2 + 3*b**3
-    c3 = -6*b**2 - 3*b - 3*b**3
-    c4 = 1 + 3*b + b**3 + 3*b**2
-    
-    return c1*e6 + c2*e5 + c3*e4 + c4*e3
-
-def generate_signals(DF, fast_length=8, slow_length=13, 
-                    fast_vol=0.7, slow_vol=0.6, use_heikin_ashi=False):
-    """
-    Generate trading signals based on T3MA crossover system
-    Returns DataFrame with signals and indicator values
-    """
+def calculate_laguerre(DF, gamma=0.77):
     df = DF.copy()
-    # 1. Convert to Heikin Ashi if enabled
-    if use_heikin_ashi:
-        df = calculate_heikin_ashi(df)
+    """
+    Calculate Laguerre Moving Average with simplified logic
+    """
+    df = df.copy()
+    typical_price = (df['high'] + df['low']) / 2
     
-    # 2. Calculate T3 Moving Averages
-    df['fast_t3'] = t3ma(df['close'], fast_length, fast_vol)
-    df['slow_t3'] = t3ma(df['close'], slow_length, slow_vol)
+    # Initialize components as float series
+    L0 = pd.Series(0.0, index=df.index)
+    L1 = pd.Series(0.0, index=df.index)
+    L2 = pd.Series(0.0, index=df.index)
+    L3 = pd.Series(0.0, index=df.index)
     
-    # 3. Generate Signals
-    df['buy_signal1'] = (df['close'] > df['fast_t3']) & (df['close'] > df['slow_t3'])
-    df['sell_signal1'] = (df['close'] < df['fast_t3']) & (df['close'] < df['slow_t3'])
+    # Vectorized calculation
+    for i in range(1, len(df)):
+        L0[i] = (1 - gamma) * typical_price[i] + gamma * L0[i-1]
+        L1[i] = -gamma * L0[i] + L0[i-1] + gamma * L1[i-1]
+        L2[i] = -gamma * L1[i] + L1[i-1] + gamma * L2[i-1]
+        L3[i] = -gamma * L2[i] + L2[i-1] + gamma * L3[i-1]
     
-    # 4. Clean data
-    df.dropna(inplace=True)
+    df['LMA'] = (L0 + 2*L1 + 2*L2 + L3) / 6
     return df
-#===============================================================================================================================
-def alma(series, window=50, offset=0.85, sigma=6):
-    """
-    Arnaud Legoux Moving Average (ALMA)
-    series: Input data series
-    window: Lookback period
-    offset: Gaussian window offset (0.85 = near the end)
-    sigma: Gaussian window width
-    """
-    # Calculate Gaussian weights
-    m = offset * (window - 1)
-    s = window / sigma
-    weights = np.arange(window)
-    weights = np.exp(-((weights - m)**2)/(2*s**2))
-    weights /= weights.sum()
-    
-    # Apply weights using rolling window
-    alma = series.rolling(window=window).apply(
-        lambda x: np.sum(x * weights[-len(x):]), raw=True
-    )
-    return alma
 
-def calculate_trendilo_signals(DF, lookback=50, smooth=1, offset=0.85, sigma=6, 
-                            band_mult=1.0, use_custom_band=False, custom_band_len=20):
-    """
-    Calculate Trendilo indicator and generate signals
-    Returns DataFrame with indicator values and signals
-    """
+def generate_signals1(DF):
     df = DF.copy()
-    # 1. Calculate percentage change
-    df['pct_change'] = df['close'].pct_change(periods=smooth) * 100
+    """
+    Generate continuous signals:
+    - Buy (1) when line is blue (rising)
+    - Sell (-1) when line is red (falling)
+    """
+    df['signal1'] = np.where((df['LMA'] > df['LMA'].shift(1)) & (df['close'] > df['LMA']), 1, -1)
+    #df['signal1'] = np.where((df['close'] > df['LMA']), 1, -1)
     
-    # 2. Calculate ALMA of percentage change
-    df['avpch'] = alma(df['pct_change'], window=lookback, offset=offset, sigma=sigma)
-    
-    # 3. Calculate RMS bands
-    band_length = custom_band_len if use_custom_band else lookback
-    squared = df['avpch'].rolling(band_length).apply(lambda x: (x**2).mean())
-    df['upper_band'] = band_mult * np.sqrt(squared)
-    df['lower_band'] = -df['upper_band']
-    
-    # 4. Generate signals
-    df['buy_signal2'] = df['avpch'] > df['upper_band']
-    df['sell_signal2'] = df['avpch'] < df['lower_band']
-    
-    # Clean up
-    df.dropna(inplace=True)
     return df
-#=================================================================================================================================
 
-def rma(series, period):
-    """Wilder's Moving Average (RMA) calculation"""
-    return series.ewm(alpha=1/period, adjust=False).mean()
+def calculate_qqe(df, rsi_length=6, smoothing=5, qqe_factor=3.0, source='close'):
+    """Calculate QQE components"""
+    df = df.copy()
+    price = df[source]
+    
+    # Calculate RSI
+    delta = price.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = (-delta).where(delta < 0, 0)
+    avg_gain = gain.ewm(alpha=1/rsi_length, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/rsi_length, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    # Smooth RSI
+    smoothed_rsi = rsi.ewm(span=smoothing, adjust=False).mean()
+    
+    # Calculate Dynamic Bands
+    atr_rsi = smoothed_rsi.diff().abs()
+    wilders = rsi_length * 2 - 1
+    datr = atr_rsi.ewm(span=wilders, adjust=False).mean() * qqe_factor
+    
+    # Calculate Trend Lines
+    long_band = smoothed_rsi - datr
+    short_band = smoothed_rsi + datr
+    
+    # Trend Direction
+    trend_dir = pd.Series(0, index=df.index)
+    cross_above = (smoothed_rsi > short_band.shift(1)) & (smoothed_rsi.shift(1) <= short_band.shift(1))
+    cross_below = (smoothed_rsi < long_band.shift(1)) & (smoothed_rsi.shift(1) >= long_band.shift(1))
+    
+    trend_dir[cross_above] = 1
+    trend_dir[cross_below] = -1
+    trend_dir = trend_dir.replace(0, method='ffill')
+    
+    # Trend Line
+    trend_line = np.where(trend_dir == 1, long_band, short_band)
+    
+    return pd.DataFrame({
+        'trend_line': trend_line,
+        'smoothed_rsi': smoothed_rsi
+    }, index=df.index)
 
-def calculate_ma_adx(DF, adx_length=14, adx_smoothing=14, ma_length=34, adx_threshold=18):
-    """
-    Calculate MA ADX indicator with signals
-    Returns DataFrame with indicators and signals
-    """
-    df = DF.copy()
-    # Calculate True Range
-    df['prev_high'] = df['high'].shift(1)
-    df['prev_low'] = df['low'].shift(1)
-    df['prev_close'] = df['close'].shift(1)
-    df['tr1'] = df['high'] - df['low']
-    df['tr2'] = abs(df['high'] - df['prev_close'])
-    df['tr3'] = abs(df['low'] - df['prev_close'])
-    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
+def generate_qqe_signals(df):
+    """Generate buy/sell signals based on QQE MOD logic"""
+    # Calculate Primary QQE
+    primary = calculate_qqe(df, 
+                        rsi_length=6,
+                        smoothing=5,
+                        qqe_factor=3.0)
     
-    # Calculate Directional Movements
-    df['up'] = df['high'].diff()
-    df['down'] = -df['low'].diff()
+    # Calculate Secondary QQE
+    secondary = calculate_qqe(df, 
+                            rsi_length=6,
+                            smoothing=5,
+                            qqe_factor=1.61)
     
-    # Calculate +DM and -DM
-    df['plus_dm'] = np.where((df['up'] > df['down']) & (df['up'] > 0), df['up'], 0)
-    df['minus_dm'] = np.where((df['down'] > df['up']) & (df['down'] > 0), df['down'], 0)
+    # Bollinger Bands Calculation
+    basis = primary['trend_line'].rolling(50).mean() - 50
+    std = primary['trend_line'].rolling(50).std()
+    upper_bb = basis + 0.35 * std
+    lower_bb = basis - 0.35 * std
     
-    # Calculate DI values
-    df['tr_rma'] = rma(df['tr'], adx_length)
-    df['plus_di'] = 100 * rma(df['plus_dm'], adx_length) / df['tr_rma']
-    df['minus_di'] = 100 * rma(df['minus_dm'], adx_length) / df['tr_rma']
+    # Signal Conditions
+    buy_signal = (
+        (secondary['smoothed_rsi'] - 50 > 3.0) &
+        (primary['smoothed_rsi'] - 50 > upper_bb))
     
-    # Calculate ADX
-    df['dx'] = abs(df['plus_di'] - df['minus_di']) / (df['plus_di'] + df['minus_di']).replace(0, 1)
-    df['adx'] = 100 * rma(df['dx'], adx_smoothing)
+    sell_signal = (
+        (secondary['smoothed_rsi'] - 50 < -3.0) &
+        (primary['smoothed_rsi'] - 50 < lower_bb))
     
-    # Calculate Weighted Moving Average
-    weights = pd.Series(np.arange(1, ma_length+1), index=np.arange(ma_length))
-    df['ma'] = df['close'].rolling(ma_length).apply(
-        lambda x: (x * weights[:len(x)]).sum() / weights[:len(x)].sum())
-    
-    # Generate color signals
-    df['ma_color'] = np.where(
-        (df['adx'] > adx_threshold) & (df['plus_di'] > df['minus_di']), 
-        'green', 
-        np.where(
-            (df['adx'] > adx_threshold) & (df['plus_di'] < df['minus_di']), 
-            'red', 
-            'neutral'
-        )
+    df['signal2'] = np.select(
+        [buy_signal, sell_signal],
+        [1, -1],
+        default=0
     )
     
-    # Generate buy/sell signals
-    df['buy_signal3'] = df['ma_color'].eq('green') & df['ma_color'].shift(1).ne('green')
-    df['sell_signal3'] = df['ma_color'].eq('red') & df['ma_color'].shift(1).ne('red')
-    
-    return df.dropna().copy()
+    return df
 
-#_____________________________________________________________________________________________________________________________________________________
-#STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
+
 def calculate_volatility(DF, length, mult):
             df = DF.copy()
             # Calculate True Range
@@ -305,59 +253,35 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         return df['sar']
 
 
-#===========================================================================================================================================
-
+# Example usage
 if __name__ == "__main__":
-    # Get data from MT5
-    symbol = "AUDUSD"
+    # Load your price data (example with random data)
+    symbol = "EURUSD"
     timeframe = "TIMEFRAME_M15"
-    data = get_hist_data(symbol, timeframe,num_candles=35040,time_till=None)
+    num_candles = 35040
+    data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
+    data['200_ema'] = data['close'].ewm(span=200, adjust=False).mean()
     data = data.dropna().copy()
     
-    if data is not None:
-        # Generate signals
-        data1 = generate_signals(data, fast_length=45, slow_length=50, 
-                    fast_vol=0.7, slow_vol=0.6, use_heikin_ashi=False)
-        data2 = calculate_trendilo_signals(data, lookback=50, smooth=1, offset=0.85, sigma=6, 
-                            band_mult=1.0, use_custom_band=False, custom_band_len=20)
-        data3 = calculate_ma_adx(data, adx_length=14, adx_smoothing=14, ma_length=34, adx_threshold=18)
-        ha_data = calculate_heikin_ashi(data)
-        data[['ha_open', 'ha_close', 'color']]= ha_data[['ha_open', 'ha_close', 'color']]
-        data['volatility'] = calculate_volatility(data, 34, 2.4)
+    # Calculate indicator
+    #results = calculate_regression_indicator(data)
+    result1 = calculate_laguerre(data, gamma=0.95)
+    #result2 = calculate_qqe(data, rsi_length=6, smoothing=5, qqe_factor=3.0, source='close')
+    #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
+    result3 = generate_signals1(result1)
+    result4 = generate_qqe_signals(data)
+    data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-        data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
-        
-        # 1. Create signal copies with unique names
-        data['buy_signal1'] = data1['buy_signal1']
-        data['sell_signal1'] = data1['sell_signal1']
-        data['buy_signal2'] = data2['buy_signal2']
-        data['sell_signal2'] = data2['sell_signal2']
-        data['buy_signal3'] = data3['buy_signal3']
-        data['sell_signal3'] = data3['sell_signal3']
-        
-        # signal_cols = {
-        #     'buy_signal1': data1['buy_signal1'],
-        #     'sell_signal1': data1['sell_signal1'],
-        #     'buy_signal2': data2['buy_signal2'],
-        #     'sell_signal2': data2['sell_signal2'],
-        #     'buy_signal3': data3['buy_signal3'],
-        #     'sell_signal3': data3['sell_signal3']
-        # }
-        
-        # # 2. Add to main dataframe
-        # data = data.assign(**signal_cols)
-        
-        # # 3. Fill any missing signals (due to indicator calculations)
-        # data[signal_cols.keys()] = data[signal_cols.keys()].ffill().fillna(False)
-
-        
-        
-        print("\nLatest Trading Signals:")
-        print(f"Signal1: {data1['buy_signal1']} | {data1['sell_signal1']}")
-        print(f"Signal2: {data2['buy_signal2']} | {data2['sell_signal2']}")
-        print(f"Signal3: {data3['buy_signal3']} | {data3['sell_signal3']}")
-        
-
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+    
+    data['trend_direction'] = np.where(data['close'] > data['200_ema'], 1, -1)
+    
+    data['signal1'] = result3['signal1']
+    data['signal2'] = result4['signal2']
+    # data['bear_signal'] = result2['bear_signal']
+    # data['bear_signal+'] = result2['bear_signal+']
+    # data['state'] = results['state']
+    
     signal = None
     data["returns"] = 0.0
     trade_stats = []
@@ -368,15 +292,21 @@ if __name__ == "__main__":
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
-        
         if signal == None:
-            if (data.iloc[i]['buy_signal1'] and data.iloc[i]['buy_signal2']
+            if (data.iloc[i]['signal1']==1 and\
+                data.iloc[i]['signal2']==1 and\
+                    (data.iloc[i]['close'] > data.iloc[i]['open']) and data.iloc[i]['trend_direction'] == 1
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -388,12 +318,19 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif (data.iloc[i]['sell_signal1'] and data.iloc[i]['sell_signal2'] and\
-                data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
+            elif (data.iloc[i]['signal1']==-1 and\
+                data.iloc[i]['signal2']==-1 and\
+                    (data.iloc[i]['close'] < data.iloc[i]['open']) and data.iloc[i]['trend_direction'] ==-1
+                #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -407,7 +344,14 @@ if __name__ == "__main__":
                             
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 12 * 6  # 4 hours for M15
+            if timeframe == "TIMEFRAME_M5":
+                max_hold_bars = 96*3 #24 hours for M5
+            elif timeframe == "TIMEFRAME_M15":
+                max_hold_bars = 96 #24 hours for M15
+            elif timeframe == "TIMEFRAME_M30":
+                max_hold_bars = 48 #24 hours for M30
+            elif timeframe == "TIMEFRAME_H1":
+                max_hold_bars = 24 # 24 hours for H1
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -429,7 +373,14 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 12 * 6  # 4 hours for M15
+            if timeframe == "TIMEFRAME_M5":
+                max_hold_bars = 96*3 #24 hours for M5
+            elif timeframe == "TIMEFRAME_M15":
+                max_hold_bars = 96 #24 hours for M15
+            elif timeframe == "TIMEFRAME_M30":
+                max_hold_bars = 48 #24 hours for M30
+            elif timeframe == "TIMEFRAME_H1":
+                max_hold_bars = 24 # 24 hours for H1
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None

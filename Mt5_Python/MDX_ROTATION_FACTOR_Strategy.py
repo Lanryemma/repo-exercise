@@ -9,7 +9,6 @@ from pandas import Series
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
-
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -22,8 +21,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
-#file_path = r"C:\Users\user\Documents\LANRE\Desktop\FRONTEND\Mt5 Python\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -33,206 +31,14 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
     print("connection not established")
 else:
     print("connection established")
-
-
-
-# Configuration
-RSI_PERIOD = 21
-MA_PERIOD = 21
-MA_TYPE = 'EMA'
-OB_LEVEL = 70
-OS_LEVEL = 30
-MOMENTUM_THRESHOLD = 50
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#TECHNICAL INDICATOR WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
-def calculate_rsi(data, period):
-    delta = data['close'].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    
-    # Wilder's RMA calculation
-    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
-    
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-
-
-def calculate_ma(data, period, ma_type):
-    """Calculate moving average"""
-    if ma_type == 'SMA':
-        return data.rolling(period).mean()
-    elif ma_type == 'EMA':
-        return data.ewm(span=period, adjust=False).mean()
-    elif ma_type == 'RMA':
-        return data.ewm(alpha=1/period, adjust=False).mean()
-    return data  # Fallback to original data
-"""
-def detect_divergence(high, low, rsi, lookback=14):
-    #Detect regular and hidden divergences
-    signals = pd.DataFrame(index=rsi.index)
-    
-    # Find pivot points
-    highs = high.rolling(lookback, center=True).max()
-    lows = low.rolling(lookback, center=True).min()
-    
-    # Regular Bullish Divergence
-    regular_bullish = (low.shift(2) < lows) & (rsi.shift(2) > rsi)
-    # Regular Bearish Divergence
-    regular_bearish = (high.shift(2) > highs) & (rsi.shift(2) < rsi)
-    
-    # Hidden Bullish Divergence
-    hidden_bullish = (low.shift(2) > lows) & (rsi.shift(2) < rsi)
-    # Hidden Bearish Divergence
-    hidden_bearish = (high.shift(2) < highs) & (rsi.shift(2) > rsi)
-    
-    signals['regular_bullish'] = regular_bullish
-    signals['regular_bearish'] = regular_bearish
-    signals['hidden_bullish'] = hidden_bullish
-    signals['hidden_bearish'] = hidden_bearish
-    
-    return signals
-"""
-def detect_divergence(high, low, rsi, lookback_left=14, lookback_right=1):
-    signals = pd.DataFrame(index=rsi.index)
-    
-    # 1. Pivot Detection with Proper Lookback
-    def find_pivots(series, is_high=True):
-        pivots = pd.Series(False, index=series.index)
-        for i in range(lookback_left, len(series)-lookback_right):
-            window = series.iloc[i-lookback_left:i+lookback_right+1]
-            if is_high:
-                pivots.iloc[i] = window.idxmax() == series.index[i]
-            else:
-                pivots.iloc[i] = window.idxmin() == series.index[i]
-        return pivots
-
-    # Find pivot points
-    high_pivots = find_pivots(high, is_high=True)
-    low_pivots = find_pivots(low, is_high=False)
-
-    # 2. Regular Divergence
-    regular_bullish = (
-        low_pivots & 
-        (low.shift(lookback_left) > low) &  # Lower low
-        (rsi.shift(lookback_left) < rsi) )   # Higher RSI
-
-    regular_bearish = (
-        high_pivots & 
-        (high.shift(lookback_left) < high) &  # Higher high
-        (rsi.shift(lookback_left) > rsi)   )   # Lower RSI
-
-    # 3. Hidden Divergence
-    hidden_bullish = (
-        low_pivots & 
-        (low.shift(lookback_left) < low) &  # Higher low
-        (rsi.shift(lookback_left) > rsi))    # Lower RSI
-
-    hidden_bearish = (
-        high_pivots & 
-        (high.shift(lookback_left) > high) &  # Lower high
-        (rsi.shift(lookback_left) < rsi) )     # Higher RSI
-
-    # 4. Assign Signals
-    signals['regular_bullish'] = regular_bullish
-    signals['regular_bearish'] = regular_bearish
-    signals['hidden_bullish'] = hidden_bullish
-    signals['hidden_bearish'] = hidden_bearish
-
-    return signals
-"""
-def detect_sweep(rsi, price, momentum_threshold):
-    #Detect RSI sweep signals
-    signals = pd.DataFrame(index=rsi.index)
-    
-    # Bullish sweep conditions
-    bullish_crossover = (rsi.shift(1) < momentum_threshold) & (rsi > momentum_threshold)
-    bearish_crossunder = (rsi.shift(1) > momentum_threshold) & (rsi < momentum_threshold)
-    
-    signals['bullish_sweep'] = bullish_crossover
-    signals['bearish_sweep'] = bearish_crossunder
-    
-    return signals
-"""
-def detect_sweep(rsi, price, momentum_threshold):
-    """Detect RSI sweep with liquidity checks"""
-    signals = pd.DataFrame(index=rsi.index)
-    
-    # 1. Identify liquidity pools
-    liquidity_zones = price.rolling(20).agg(['min', 'max'])
-    
-    # 2. RSI sweep conditions
-    bullish = (
-        (rsi.shift(1) < momentum_threshold) &
-        (rsi > momentum_threshold) &
-        (price <= liquidity_zones['min'].shift(1))  # Swept previous low
-    )
-    
-    bearish = (
-        (rsi.shift(1) > momentum_threshold) &
-        (rsi < momentum_threshold) &
-        (price >= liquidity_zones['max'].shift(1))  # Swept previous high
-    )
-    
-    signals['bullish_sweep'] = bullish
-    signals['bearish_sweep'] = bearish
-    
-    return signals
-
-def generate_signals(data):
-    """Generate trading signals"""
-    # Calculate indicators
-    data['rsi'] = calculate_rsi(data, RSI_PERIOD)
-    data['ma'] = calculate_ma(data['rsi'], MA_PERIOD, MA_TYPE)
-    
-    # Detect patterns
-    divergence_signals = detect_divergence(data['high'], data['low'], data['rsi'])
-    sweep_signals = detect_sweep(data['rsi'], data['close'], MOMENTUM_THRESHOLD)
-    
-    # Combine signals
-    signals = pd.concat([divergence_signals, sweep_signals], axis=1)
-    
-    # Generate final signals
-    signals['buy'] = signals['regular_bullish'] | signals['hidden_bullish'] | signals['bullish_sweep']
-    signals['sell'] = signals['regular_bearish'] | signals['hidden_bearish'] | signals['bearish_sweep']
-    
-    signals['strong_buy'] = (
-    signals['regular_bullish'] &
-    (data['rsi'] - data['rsi'].shift(5) > 3) &  # Per-bar comparison
-    (data['low'] == data['low'].rolling(5).min()))  # Per-bar min check
-    # # RSI increased by 5 points
-    # # Price decreased
-
-    signals['strong_sell'] = (
-    signals['regular_bearish'] &
-    (data['rsi'].shift(5) - data['rsi'] > 3) &  # 3+ points decrease over 5 bars
-    (data['high'] == data['high'].rolling(5, min_periods=1).max()))  # Current high is 5-bar maximum
-    return signals
-
-# MT5 Integration
-"""
-def get_hist_data_numeric_index(symbol, timeframe, start_pos=0, num_candles=35040):
-    
-    # Parameters
-    # ----------
-    # symbol : TYPE str - e.g "USDCAD"
-    # timeframe : TYPE str - e.g. "TIMEFRAME_M15"
-    # start_pos : TYPE int -e.g. 0 means data till current time
-    # num_candles : TYPE int
-    # Returns
-    # -------
-    # historical data dataframe
-    
-    hist_data = mt5.copy_rates_from_pos(symbol, getattr(mt5, timeframe), start_pos, num_candles)   
-    hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
-    hist_data_df.set_index("time", inplace=True)
-    return hist_data_df
-"""
 def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
     #pytz.all_timezones
     current_tz = pytz.timezone("Africa/Lagos") #change this based on your location
@@ -261,9 +67,85 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
         print(f"Failed to fetch data. MT5 Error: {mt5.last_error()}")
         return pd.DataFrame()
     hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
+    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s").dt.tz_localize('UTC')
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
+
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#______________________________________________________________________________________________________________________________________________________________
+#THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
+
+# Calculate technical components
+def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
+    df = DF.copy()
+    # Calculate True Range
+    df['prev_close'] = df['close'].shift(1)
+    df['tr'] = np.maximum(
+        df['high'] - df['low'],
+        np.abs(df['high'] - df['prev_close']),
+        np.abs(df['low'] - df['prev_close'])
+    )
+    
+    # Calculate ATR
+    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
+    
+    # Calculate price mean (simplified EMA)
+    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    
+    return df.dropna()
+
+# Generate MDX signals
+def generate_mdx_signals(df):
+    # Calculate price deviation from mean
+    df['deviation'] = df['close'] - df['price_mean']
+    
+    # Calculate MDX values
+    df['mdx'] = np.where(
+        df['deviation'] > 0,
+        np.maximum(df['deviation'] - df['atr'], 0),
+        np.minimum(df['deviation'] + df['atr'], 0)
+    )
+    
+    # Generate signals (1 for buy, -1 for sell)
+    df['signal1'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
+    df['signal1'] = df['signal1'].replace(0, method='ffill')  # Carry forward signals
+    
+    return df
+
+# Calculate rotation factor scores
+def calculate_scores(DF):
+    df = DF.copy()
+    df['prev_high'] = df['high'].shift(1)
+    df['prev_low'] = df['low'].shift(1)
+    
+    # Define price comparison conditions
+    conditions = [
+        (df['high'] > df['prev_high']) & (df['low'] > df['prev_low']),   # Scenario 1
+        (df['high'] < df['prev_high']) & (df['low'] < df['prev_low']),   # Scenario 2
+        (df['high'] > df['prev_high']) & (df['low'] < df['prev_low']),   # Scenario 3
+        (df['high'] < df['prev_high']) & (df['low'] > df['prev_low']),   # Scenario 4
+        (df['high'] == df['prev_high']) & (df['low'] > df['prev_low']),  # Scenario 5
+        (df['high'] > df['prev_high']) & (df['low'] == df['prev_low']),  # Scenario 6
+        (df['high'] < df['prev_high']) & (df['low'] == df['prev_low']),  # Scenario 7
+        (df['high'] == df['prev_high']) & (df['low'] < df['prev_low'])    # Scenario 8
+    ]
+    
+    # Corresponding scores for each scenario
+    scores = [2, -2, 0, 0, 1, 1, -1, -1]
+    
+    # Calculate scores and daily rotation factor
+    df['score'] = np.select(conditions, scores, default=0)
+    df['day_group'] = df.index.date  # Daily reset grouping
+    df['rotation_factor'] = df.groupby('day_group')['score'].cumsum()
+    
+    return df.dropna()
+
+# Generate trading signals
+def generate_signals(df):
+    df['signal2'] = np.where(df['rotation_factor'] > 0, 1, 
+                        np.where(df['rotation_factor'] < 0, -1, 0))
+    return df
 
 
 #_____________________________________________________________________________________________________________________________________________________
@@ -326,41 +208,64 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
     
             df['sar'] = sar
         return df['sar']
+        
 
+# MODIFY SESSION DETECTION:
+def is_session_active(timestamp, session):
+    """Check session status in Lagos time context"""
+    lagos_hour = timestamp.hour  # Already in Lagos time
+    
+    # Session hours in LAGOS TIME (GMT+1)
+    session_hours = {
+        "London": (8, 17),    # 7AM-4PM UTC → 8AM-5PM Lagos
+        "New_York": (13, 22), # 12PM-9PM UTC → 1PM-10PM Lagos
+        "Sydney": (23, 8),    # 10PM-7AM UTC → 11PM-8AM Lagos
+        "Tokyo": (1, 10)      # 12AM-9AM UTC → 1AM-10AM Lagos
+    }[session]
+
+    start, end = session_hours
+    if start <= end:
+        return start <= lagos_hour < end
+    else:
+        return lagos_hour >= start or lagos_hour < end
 
 # Example usage
 if __name__ == "__main__":
-    # Get data from MT5
-    symbol = "AUDUSD"
+    # Load your price data (example with random data)
+    symbol = "NZDUSD"
     timeframe = "TIMEFRAME_M15"
-    data = get_hist_data(symbol, timeframe,num_candles=35040,time_till=None)
+    num_candles = 35040
+    data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     data = data.dropna().copy()
     
-    if data is not None:
-        # Generate signals
-        signals = generate_signals(data)
-        data['volatility'] = calculate_volatility(data, 34, 2.4)
+    # Calculate indicator
+    #results = calculate_regression_indicator(data)
+    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
+    #result1 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
+    result1 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
+    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
+    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
+    result2 = calculate_scores(data)  # 200 bars ≈ 2 days
+    #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
+    result3 = generate_mdx_signals(result1)
+    result4 = generate_signals(result2)
+    data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-        data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
-        
-        # Get latest signal
-        latest_signal = signals.iloc[-1]
-        
-        print("\nLatest Trading Signals:")
-        print(f"Buy Signal: {latest_signal['buy']}")
-        print(f"Sell Signal: {latest_signal['sell']}")
-        print(f"RSI Value: {data['rsi'].iloc[-1]:.2f}")
-        
-        # Trading logic example
-        if latest_signal['buy']:
-            print("\nBullish Signal Detected!")
-            # Add MT5 order execution logic here
-            
-        elif latest_signal['sell']:
-            print("\nBearish Signal Detected!")
-            # Add MT5 order execution logic here
-
-
+    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+    # 1. Convert to proper timezone-aware index
+    data = data.tz_convert('Africa/Lagos') 
+    # 2. Add session flags directly (no separate function needed)
+    data['london_active'] = data.index.map(lambda x: is_session_active(x, "London"))
+    data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
+    data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
+    data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
+    data['signal1'] = result3['signal1']
+    data['signal2'] = result4['signal2']
+    # data['bear_signal'] = result2['bear_signal']
+    # data['bear_signal+'] = result2['bear_signal+']
+    # data['sell_signal2'] = data2['sell_signal2']
+    # data['buy_signal3'] = data3['buy_signal3']
+    
     signal = None
     data["returns"] = 0.0
     trade_stats = []
@@ -373,12 +278,18 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if (signals.iloc[i]['buy'] #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
+            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+                #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -390,11 +301,17 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif (signals.iloc[i]['sell'] #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
+            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
+                #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -408,7 +325,7 @@ if __name__ == "__main__":
                             
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 12 * 6  # 4 hours for M15
+            max_hold_bars = 96 #12 * 6  # 4 hours for M15
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -430,7 +347,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 12 * 6  # 4 hours for M15
+            max_hold_bars = 96#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None

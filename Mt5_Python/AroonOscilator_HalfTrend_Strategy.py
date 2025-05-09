@@ -21,7 +21,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -77,7 +77,6 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
 # Calculate technical components
-
 def calculate_heikin_ashi(df):
     ha = df.copy()
     
@@ -90,106 +89,68 @@ def calculate_heikin_ashi(df):
     ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
     return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
 
-
-#  ---------------------------------------
-# Kalman Filter implementation======================================================================================
-def kalman_filter(series, length, R=0.01, Q=0.1):
-    estimates = np.zeros(len(series))
-    error_est = 1.0
+# 4. HALF TREND CALCULATION ==========================================================================
+def calculate_half_trend(df, period=5):
+    """Vectorized Half Trend calculation"""
+    ht_df = df.copy()
+    close = ht_df['ha_close'].values
+    high = ht_df['ha_high'].values
+    low = ht_df['ha_low'].values
     
-    # Use .iloc for position-based access
-    estimates[0] = series.iloc[0]  # First element
+    # Precompute rolling values
+    rolling_max = pd.Series(high).rolling(period, min_periods=1).max().values
+    rolling_min = pd.Series(low).rolling(period, min_periods=1).min().values
+    close_ma = pd.Series(close).rolling(period, min_periods=1).mean().values
     
-    for i in range(1, len(series)):
-        prediction = estimates[i-1]
-        
-        # Kalman gain calculation
-        error_meas = R * length
-        kalman_gain = error_est / (error_est + error_meas)
-        
-        # Use .iloc for position-based access
-        current_value = series.iloc[i]
-        estimates[i] = prediction + kalman_gain * (current_value - prediction)
-        
-        # Error estimate update
-        error_est = (1 - kalman_gain) * error_est + Q / length
+    # Initialize arrays
+    hl_t = np.zeros_like(close)
+    signal = np.zeros_like(close)
     
-    return pd.Series(estimates, index=series.index)
-
-# Calculate signals
-def calculate_signals(DF, short_len=50, long_len=150):
-    df = DF.copy()
-    # Calculate Kalman filters
-    df['short_kalman'] = kalman_filter(df['close'], short_len)
-    df['long_kalman'] = kalman_filter(df['close'], long_len)
+    # Vectorized conditional logic
+    cond1 = (close_ma < np.roll(hl_t, 1)) & (rolling_max < np.roll(hl_t, 1))
+    cond2 = (close_ma > np.roll(hl_t, 1)) & (rolling_min > np.roll(hl_t, 1))
     
-    # Generate trend signals
-    df['signal1'] = np.where(
-        df['short_kalman'] > df['long_kalman'], 
-        1,  # Up trend
-        -1  # Down trend
+    hl_t = np.select(
+        [cond1, cond2],
+        [rolling_max, rolling_min],
+        default=np.roll(hl_t, 1)
     )
-    
-    return df
-
-# 3. Indicator Calculation
-def calculate_xmaster_signals(DF, short_ema=10, long_ema=38):
-    df = DF.copy()
-    # Calculate EMAs
-    df['EMA_Short'] = df['close'].ewm(span=short_ema, adjust=False).mean()
-    df['EMA_Long'] = df['close'].ewm(span=long_ema, adjust=False).mean()
-    
-    # Calculate normalized difference
-    df['MA_Diff'] = df['EMA_Short'] - df['EMA_Long']
-    df['Min_Diff'] = df['MA_Diff'].expanding().min()
-    df['Max_Diff'] = df['MA_Diff'].expanding().max()
-    
-    # Handle division by zero
-    diff_range = df['Max_Diff'] - df['Min_Diff']
-    df['Normalized'] = 100 * (df['MA_Diff'] - df['Min_Diff']) / diff_range.replace(0, 1)
-    
     # Generate signals
-    df['signal2'] = 0
-    df.loc[df['Normalized'] > 55, 'signal2'] = 1    # Green line
-    df.loc[df['Normalized'] < 45, 'signal2'] = -1   # Red line
-    return df
+    signal = np.where(hl_t > np.roll(hl_t, 1), 1, 
+            np.where(hl_t < np.roll(hl_t, 1), -1, 0))
+    
+    # Handle initial period
+    hl_t[:period] = close[:period]
+    signal[:period] = 0
+    
+    # Assign to DataFrame
+    ht_df['half_trend'] = hl_t
+    ht_df['signal1'] = signal
+    return ht_df
 
-# Calculate technical components
-def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
+# 3. AROON CALCULATIONS ================================================================================================
+def calculate_aroon(DF, length=14):
     df = DF.copy()
-    # Calculate True Range
-    df['prev_close'] = df['close'].shift(1)
-    df['tr'] = np.maximum(
-        df['high'] - df['low'],
-        np.abs(df['high'] - df['prev_close']),
-        np.abs(df['low'] - df['prev_close'])
-    )
     
-    # Calculate ATR
-    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
+    # Calculate periods since highest high/lowest low
+    df['high_idx'] = df['high'].rolling(length).apply(np.argmax, raw=True)
+    df['low_idx'] = df['low'].rolling(length).apply(np.argmin, raw=True)
     
-    # Calculate price mean (simplified EMA)
-    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    # Calculate Aroon values
+    df['aroon_up'] = ((length - (length - 1 - df['high_idx'])) / length) * 100
+    df['aroon_down'] = ((length - (length - 1 - df['low_idx'])) / length) * 100
     
-    return df.dropna()
+    # Calculate oscillator
+    df['aroon_osc'] = df['aroon_up'] - df['aroon_down']
+    
+    return df.drop(['high_idx', 'low_idx'], axis=1)
 
-# Generate MDX signals
-def generate_mdx_signals(df):
-    # Calculate price deviation from mean
-    df['deviation'] = df['close'] - df['price_mean']
-    
-    # Calculate MDX values
-    df['mdx'] = np.where(
-        df['deviation'] > 0,
-        np.maximum(df['deviation'] - df['atr'], 0),
-        np.minimum(df['deviation'] + df['atr'], 0)
-    )
-    
-    # Generate signals (1 for buy, -1 for sell)
-    df['signal3'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
-    df['signal3'] = df['signal3'].replace(0, method='ffill')  # Carry forward signals
-    
+# 4. SIGNAL GENERATION =================================================================================================
+def generate_signals(df):
+    df['signal2'] = 0
+    df['signal2'] = np.where(df['aroon_osc'] > 0, 1, -1)
     return df
+
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -274,38 +235,17 @@ def is_session_active(timestamp, session):
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
-    #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
-    #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "USDJPY"
+    symbol = "AUDUSD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
-    # ha_data = calculate_heikin_ashi(data)
-    # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+    result1 = calculate_heikin_ashi(data)# for 1
     data = data.dropna().copy()
     
     # Calculate indicator
-        # Scalping (M1-M15)
-    # 'M1':   {'short_len': 180,  'long_len': 540},   # 3hr/9hr
-    # 'M5':   {'short_len': 72,   'long_len': 216},   # 6hr/18hr
-    # 'M15':  {'short_len': 48,   'long_len': 144},   # 12hr/36hr
-    
-    # # Day Trading (M30-H4)
-    # 'M30':  {'short_len': 24,   'long_len': 72},    # 12hr/36hr
-    # 'H1':   {'short_len': 50,   'long_len': 150},   # Original (50hr/150hr)
-    # 'H4':   {'short_len': 18,   'long_len': 54},    # 3d/9d
-    
-    
-    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
-    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
-    
-    result1 = calculate_signals(data, short_len=48, long_len=144) 
-    result2 = calculate_xmaster_signals(data, short_ema=12, long_ema=48) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
-    result4 = generate_mdx_signals(result3)
+    result2 = calculate_half_trend(result1, period=25)
+    result3 = calculate_aroon(data, length=35)
+    result4 = generate_signals(result3)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
@@ -316,9 +256,8 @@ if __name__ == "__main__":
     data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
     data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
     data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
-    data['signal1'] = result1['signal1']
-    data['signal2'] = result2['signal2']
-    data['signal3'] = result4['signal3']
+    data['signal1'] = result2['signal1']
+    data['signal2'] = result4['signal2']
     # data['bear_signal'] = result2['bear_signal']
     # data['bear_signal+'] = result2['bear_signal+']
     # data['sell_signal2'] = data2['sell_signal2']
@@ -336,7 +275,7 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) #&  (data.iloc[i]['signal2']==1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active']) 
+            if ((data.iloc[i]['signal1']==1)  &  ((data.iloc[i]['signal2']==1) | (data.iloc[i]['signal2']==0) ) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
@@ -359,7 +298,7 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) #&  (data.iloc[i]['signal2']==-1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])
+            elif ((data.iloc[i]['signal1']==-1)  &  ((data.iloc[i]['signal2']==-1) | (data.iloc[i]['signal2']==0) )#(data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips

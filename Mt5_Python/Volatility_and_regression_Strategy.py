@@ -9,6 +9,7 @@ from pandas import Series
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
+
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -21,7 +22,8 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
+#file_path = r"C:\Users\user\Documents\LANRE\Desktop\FRONTEND\Mt5 Python\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -31,11 +33,10 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
     print("connection not established")
 else:
     print("connection established")
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#TECHNICAL INDICATOR WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
+
+# Get price data
+#______________________________________________________________________________________________________________________________________________________________
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
@@ -67,7 +68,7 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
         print(f"Failed to fetch data. MT5 Error: {mt5.last_error()}")
         return pd.DataFrame()
     hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s").dt.tz_localize('UTC')
+    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
@@ -76,92 +77,78 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
-def calculate_vbm_signals(df, factor=4, pd=14):
-    """Calculate Buy/Sell signals based on volatility bands."""
-    # Calculate ATR and Mid-Price (hl2)
-    df['hl2'] = (df['high'] + df['low']) / 2
-    df['tr'] = np.maximum(df['high'] - df['low'], 
-                        np.maximum(abs(df['high'] - df['close'].shift()), 
-                                    abs(df['low'] - df['close'].shift())))
-    df['atr'] = df['tr'].rolling(pd).mean()
+def calculate_regression_indicator(DF, length=400, norm_length=100, signal_length=50):
+    df = DF.copy()
+    """Calculate normalized regression indicator"""
+    # Linear regression calculations
+    def rolling_regression(window):
+        x = np.arange(1, len(window)+1)
+        y = window.values
+        slope = (len(x)*np.sum(x*y) - np.sum(x)*np.sum(y)) / (len(x)*np.sum(x**2) - (np.sum(x))**2)
+        intercept = (np.sum(y) - slope*np.sum(x)) / len(x)
+        return intercept + slope  # Return regression line value
     
-    # Initialize bands
-    df['Up'] = df['hl2'] - (factor * df['atr'])
-    df['Dn'] = df['hl2'] + (factor * df['atr'])
+    # Calculate regression line
+    df['regression_line'] = df['close'].rolling(length).apply(rolling_regression, raw=False)
     
-    # Trend Tracking (requires iterative calculation)
-    df['TrendUp'] = df['Up'].copy()
-    df['TrendDown'] = df['Dn'].copy()
-    df['Trend'] = 1  # Default to bullish
+    # Calculate distance from regression line
+    df['distance'] = df['close'] - df['regression_line']
     
-    # Vectorized trend calculation
-    cond_up = df['close'].shift(1) > df['TrendUp'].shift(1)
-    df['TrendUp'] = np.where(cond_up, 
-                        np.maximum(df['Up'], df['TrendUp'].shift(1)), 
-                        df['Up'])
+    # Normalize distance
+    df['distance_norm'] = (df['distance'] - df['distance'].rolling(norm_length).mean()) 
+    df['distance_norm'] /= df['distance'].rolling(norm_length).std()
+    df['indicator'] = df['distance_norm'].rolling(10).mean()
     
-    cond_down = df['close'].shift(1) < df['TrendDown'].shift(1)
-    df['TrendDown'] = np.where(cond_down, 
-                            np.minimum(df['Dn'], df['TrendDown'].shift(1)), 
-                            df['Dn'])
-    
-    # Vectorized trend logic
-    df['Trend'] = np.select(
-        [
-            df['close'] > df['TrendDown'].shift(1),
-            df['close'] < df['TrendUp'].shift(1)
-        ],
-        [1, -1],
-        default=df['Trend'].shift(1))
-    # Generate Signals
-    df['MACD'] = np.where(df['Trend'] == 1, df['TrendUp'], df['TrendDown'])
-    df['signal1'] = 0
-    
-    # Buy Signal: Price crosses above MACD line
-    #df.loc[(df['close'] > df['MACD']) | (df['close'].shift() <= df['MACD'].shift()), 'signal1'] = 1
-    df.loc[(df['close'] > df['MACD']), 'signal1'] = 1
-    
-    # Sell Signal: Price crosses below MACD line
-    #df.loc[(df['close'] < df['MACD']) | (df['close'].shift() >= df['MACD'].shift()), 'signal1'] = -1
-    df.loc[(df['close'] < df['MACD']), 'signal1'] = -1
+    # Generate signals
+    # df['signal'] = np.where(df['indicator'] > 0, 1, 0)
+    # df['signal'] = df['signal'].diff()  # 1 for cross above, -1 for cross below
+    df['state'] = np.where(df['indicator'] > 0, 1, -1)
     
     return df
 
-def calculate_qqe_signals(df, rsi_length=8, smooth=6, bb_length=50, bb_mult=0.5):
 
-    """
-    Generates QQE signals: 1 (blue), -1 (red), 0 (gray)
-    """
-    # Calculate RSI
-    delta = df['close'].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(rsi_length).mean()
-    avg_loss = loss.rolling(rsi_length).mean()
-    rs = avg_gain / avg_loss
-    df['RSI'] = 100 - (100 / (1 + rs))
+def gaussian_weights(length, sigma=10):
+    """Generate Gaussian weights"""
+    x = np.arange(length)
+    weights = np.exp(-0.5 * ((x - length/2) / sigma)**2)
+    return weights / weights.sum()
+
+def calculate_bands(DF, length=20, distance=2.0, vol_period=100):
+    df = DF.copy()
+    """Calculate volatility Gaussian bands"""
+    # Gaussian filter
+    weights = gaussian_weights(length)
+    df['gaussian'] = df['close'].rolling(length).apply(
+        lambda x: np.dot(x, weights), raw=True
+    )
     
-    # Smooth RSI with EMA
-    df['SmoothedRSI'] = df['RSI'].ewm(span=smooth).mean()
+    # Volatility calculation
+    df['volatility'] = (df['high'] - df['low']).rolling(vol_period).mean()
     
-    # Adjust RSI to oscillate around 0 (subtract 50)
-    df['RSI_Adjusted'] = df['SmoothedRSI'] - 50
+    # Bands calculation
+    df['upper_band'] = df['gaussian'] + df['volatility'] * distance
+    df['lower_band'] = df['gaussian'] - df['volatility'] * distance
     
-    # Bollinger Bands on Adjusted RSI
-    df['Basis'] = df['RSI_Adjusted'].rolling(bb_length).mean()
-    df['Dev'] = bb_mult * df['RSI_Adjusted'].rolling(bb_length).std()
-    df['Upper'] = df['Basis'] + df['Dev']
-    df['Lower'] = df['Basis'] - df['Dev']
-    
-    # Generate Signals
-    df['Signal2'] = 0
-    df.loc[df['RSI_Adjusted'] > df['Upper'], 'Signal2'] = 1     # Blue
-    df.loc[df['RSI_Adjusted'] < df['Lower'], 'Signal2'] = -1    # Red
+    # Trend score
+    df['score'] = np.where(df['close'] > df['upper_band'], 1.0,
+                        np.where(df['close'] < df['lower_band'], 0.0, np.nan))
+    df['score'].ffill(inplace=True)
     
     return df
 
-#_____________________________________________________________________________________________________________________________________________________
-#STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
+def generate_signals(DF):
+    df = DF.copy()
+    """Generate trading signals"""
+    df['bull_signal'] = np.where(
+        (df['close'] > df['upper_band']) | (df['score'] > 0.5), 1, 0)
+    df['bear_signal'] = np.where(
+        (df['close'] < df['lower_band']) | (df['score'] < 0.5), -1, 0)
+    df['bull_signal+'] = np.where(
+        (df['close'] > df['upper_band']) & (df['score'] > 0.5), 1, 0)
+    df['bear_signal+'] = np.where(
+        (df['close'] < df['lower_band']) & (df['score'] < 0.5), -1, 0)
+    return df
+
 def calculate_volatility(DF, length, mult):
             df = DF.copy()
             # Calculate True Range
@@ -176,7 +163,7 @@ def calculate_volatility(DF, length, mult):
             # Calculate volatility bands
             return df['atr'] * mult
 
-def parabolic_sar(df, step=0.04, max_step=0.3):#(df, step=0.035, max_step=0.28)
+def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -220,31 +207,31 @@ def parabolic_sar(df, step=0.04, max_step=0.3):#(df, step=0.035, max_step=0.28)
     
             df['sar'] = sar
         return df['sar']
-        
-
 
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "EURUSD"
+    symbol = "GBPUSD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
-    data['ema_100'] = data['close'].ewm(span=100, adjust=False).mean()
     data = data.dropna().copy()
     
     # Calculate indicator
-
-    data = calculate_qqe_signals(data, rsi_length=8, smooth=6, bb_length=50, bb_mult=0.5) # 200 bars ≈ 2 days
+    #results = calculate_regression_indicator(data)
+    result1 = calculate_bands(data, length=80, distance=1.5)  # 80 bars ≈ 20 hours
+    results = calculate_regression_indicator(data, length=200)  # 200 bars ≈ 2 days
     #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
-    data= calculate_vbm_signals(data, factor=4, pd=14)
+    result2 = generate_signals(result1)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
-    # data['signal1'] = result2['signal1']
-    # data['signal2'] = result1['signal2']
-    # data['bear_signal'] = result2['bear_signal']
-    # data['bear_signal+'] = result2['bear_signal+']
+    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+    
+    data['bull_signal'] = result2['bull_signal']
+    data['bull_signal+'] = result2['bull_signal+']
+    data['bear_signal'] = result2['bear_signal']
+    data['bear_signal+'] = result2['bear_signal+']
+    data['state'] = results['state']
     # data['sell_signal2'] = data2['sell_signal2']
     # data['buy_signal3'] = data3['buy_signal3']
     
@@ -260,18 +247,18 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['Signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+            if (data.iloc[i]['bull_signal+'] and data.iloc[i]['state']==1
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # # Scale ratios inversely with volatility
-                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    # sl_pips = 1.5 * atr  # 1.5x ATR
+                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # Scale ratios inversely with volatility
+                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -283,17 +270,17 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['Signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
+            elif (data.iloc[i]['bear_signal+'] and data.iloc[i]['state']==-1
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # # Scale ratios inversely with volatility
-                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    # sl_pips = 1.5 * atr  # 1.5x ATR
+                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # Scale ratios inversely with volatility
+                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,

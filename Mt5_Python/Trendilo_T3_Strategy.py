@@ -9,6 +9,7 @@ from pandas import Series
 from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
+
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -21,7 +22,8 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
+#file_path = r"C:\Users\user\Documents\LANRE\Desktop\FRONTEND\Mt5 Python\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -31,11 +33,10 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
     print("connection not established")
 else:
     print("connection established")
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#______________________________________________________________________________________________________________________________________________________________
-#TECHNICAL INDICATOR WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
+
+# Get price data
+#______________________________________________________________________________________________________________________________________________________________
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
@@ -67,171 +68,181 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
         print(f"Failed to fetch data. MT5 Error: {mt5.last_error()}")
         return pd.DataFrame()
     hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s").dt.tz_localize('UTC')
+    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
+
 
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
-# Calculate technical components
-
 def calculate_heikin_ashi(df):
     ha = df.copy()
     
-    # Initialize columns
-    ha['ha_close'] = (ha['open'] + ha['high'] + ha['low'] + ha['close']) / 4
-    ha['ha_open'] = (ha['open'].shift(1) + ha['close'].shift(1)) / 2
+    # Heikin-Ashi Close
+    ha['ha_close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    # Heikin-Ashi Open
+    ha['ha_open'] = 0.0
+    ha['ha_open'].iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
+    ha['ha_open'] = (ha['ha_open'].shift(1) + ha['ha_close'].shift(1)) / 2
+    # Heikin-Ashi High/Low
     ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
     ha['ha_low'] = ha[['low', 'ha_open', 'ha_close']].min(axis=1)
     
     ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
-    return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+    return ha[['ha_open', 'ha_close', 'color']]
 
+def t3ma(series, length, vol_factor):
+    """Calculate T3 Moving Average"""
+    # Calculate multiple EMAs
+    e1 = series.ewm(span=length, adjust=False).mean()
+    e2 = e1.ewm(span=length, adjust=False).mean()
+    e3 = e2.ewm(span=length, adjust=False).mean()
+    e4 = e3.ewm(span=length, adjust=False).mean()
+    e5 = e4.ewm(span=length, adjust=False).mean()
+    e6 = e5.ewm(span=length, adjust=False).mean()
+    
+    # Calculate coefficients
+    b = vol_factor
+    c1 = -b**3
+    c2 = 3*b**2 + 3*b**3
+    c3 = -6*b**2 - 3*b - 3*b**3
+    c4 = 1 + 3*b + b**3 + 3*b**2
+    
+    return c1*e6 + c2*e5 + c3*e4 + c4*e3
 
-# 2. Range Filter Indicator Calculation ---------------------------------------
-
-def calculate_range_filter(DF, sampling_period=100, range_multiplier=3.0):
+def generate_signals(DF, fast_length=8, slow_length=13, 
+                    fast_vol=0.7, slow_vol=0.6, use_heikin_ashi=False):
+    """
+    Generate trading signals based on T3MA crossover system
+    Returns DataFrame with signals and indicator values
+    """
     df = DF.copy()
+    # 1. Convert to Heikin Ashi if enabled
+    if use_heikin_ashi:
+        df = calculate_heikin_ashi(df)
     
-    # Calculate Range Filter values
-    # df = DataFrame with 'close' price column
+    # 2. Calculate T3 Moving Averages
+    df['fast_t3'] = t3ma(df['close'], fast_length, fast_vol)
+    df['slow_t3'] = t3ma(df['close'], slow_length, slow_vol)
     
-    # Calculate smooth average range
-    df['price_diff'] = np.abs(df['close'] - df['close'].shift(1))
-    df['avrng'] = df['price_diff'].ewm(span=sampling_period, adjust=False).mean()
-    wper = sampling_period * 2 - 1
-    df['smrng'] = df['avrng'].ewm(span=wper, adjust=False).mean() * range_multiplier
+    # 3. Generate Signals
+    df['buy_signal1'] = (df['close'] > df['fast_t3']) & (df['close'] > df['slow_t3'])
+    df['sell_signal1'] = (df['close'] < df['fast_t3']) & (df['close'] < df['slow_t3'])
     
-    # Calculate range filter
-    filt = [df['close'].iloc[0]] * len(df)
-    for i in range(1, len(df)):
-        prev_filt = filt[i-1]
-        close = df['close'].iloc[i]
-        smrng = df['smrng'].iloc[i]
-        
-        if close > prev_filt:
-            filt[i] = max(prev_filt, close - smrng)
-        else:
-            filt[i] = min(prev_filt, close + smrng)
-    
-    df['filt'] = filt
-    df['hband'] = df['filt'] + df['smrng']
-    df['lband'] = df['filt'] - df['smrng']
+    # 4. Clean data
+    df.dropna(inplace=True)
     return df
-"""
-def calculate_atr(df, period=14):
-    #Calculate Average True Range (ATR) with forward-fill
-    # Use raw prices for TR calculation
-    df['tr1'] = df['high'] - df['low']
-    df['tr2'] = np.abs(df['high'] - df['close'].shift())
-    df['tr3'] = np.abs(df['low'] - df['close'].shift())
+#===============================================================================================================================
+def alma(series, window=50, offset=0.85, sigma=6):
+    """
+    Arnaud Legoux Moving Average (ALMA)
+    series: Input data series
+    window: Lookback period
+    offset: Gaussian window offset (0.85 = near the end)
+    sigma: Gaussian window width
+    """
+    # Calculate Gaussian weights
+    m = offset * (window - 1)
+    s = window / sigma
+    weights = np.arange(window)
+    weights = np.exp(-((weights - m)**2)/(2*s**2))
+    weights /= weights.sum()
     
-    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
-    df['ATR'] = df['tr'].rolling(period).mean().ffill()  # Forward-fill NaN values
-    return df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1)
-
-def calculate_trailing_stop(df, atr_multiplier=2.0):
-    #Fixed trailing stop implementation
-    close = df['ha_close'].values
-    atr = df['ATR'].ffill().values  # Ensure no NaNs
-    
-    ts = np.zeros(len(close))
-    ts[0] = close[0]  # Initialize with first close
-    
-    for i in range(1, len(close)):
-        current_atr = atr[i] * atr_multiplier
-        prev_ts = ts[i-1]
-        
-        if close[i] > prev_ts:
-            ts[i] = max(prev_ts, close[i] - current_atr)
-        else:
-            ts[i] = min(prev_ts, close[i] + current_atr)
-    
-    df['TrailingStop'] = ts
-    return df
-"""
-# 3. Signal Generation --------------------------------------------------------
-
-def generate_signals1(df):
-    
-    # Generate buy/sell signals based on Range Filter
-    # Returns DataFrame with 'signal' column
-    
-    df['upward'] = (df['filt'] > df['filt'].shift(1)).astype(int)
-    df['downward'] = (df['filt'] < df['filt'].shift(1)).astype(int)
-    
-    # Signal conditions
-    long_condition = (
-        (df['close'] > df['filt']) & 
-        ((df['close'] > df['close'].shift(1)) | (df['upward'] > 0))
+    # Apply weights using rolling window
+    alma = series.rolling(window=window).apply(
+        lambda x: np.sum(x * weights[-len(x):]), raw=True
     )
-    short_condition = (
-        (df['close'] < df['filt']) & 
-        ((df['close'] < df['close'].shift(1)) | (df['downward'] > 0))
-    )
-    # Create signals
-    df['signal1'] = np.where(long_condition, 'buy', 
-                        np.where(short_condition, 'sell', None))
-    return df
-"""
+    return alma
 
-def generate_signals2(df, ema_period=1):  # Changed from 1 to 3 for better filtering
-    #Simplified signal generation
-    df['EMA'] = df['ha_close'].ewm(span=ema_period).mean()
+def calculate_trendilo_signals(DF, lookback=50, smooth=1, offset=0.85, sigma=6, 
+                            band_mult=1.0, use_custom_band=False, custom_band_len=20):
+    """
+    Calculate Trendilo indicator and generate signals
+    Returns DataFrame with indicator values and signals
+    """
+    df = DF.copy()
+    # 1. Calculate percentage change
+    df['pct_change'] = df['close'].pct_change(periods=smooth) * 100
     
-    # Basic crossover logic
-    df['signal1'] = np.where(
-        (df['ha_close'] > df['TrailingStop']) & 
-        (df['ha_close'].shift() <= df['TrailingStop'].shift()),
-        'buy',
-        np.where(
-            (df['ha_close'] < df['TrailingStop']) & 
-            (df['ha_close'].shift() >= df['TrailingStop'].shift()),
-            'sell',
-            None
-        )
-    )
+    # 2. Calculate ALMA of percentage change
+    df['avpch'] = alma(df['pct_change'], window=lookback, offset=offset, sigma=sigma)
+    
+    # 3. Calculate RMS bands
+    band_length = custom_band_len if use_custom_band else lookback
+    squared = df['avpch'].rolling(band_length).apply(lambda x: (x**2).mean())
+    df['upper_band'] = band_mult * np.sqrt(squared)
+    df['lower_band'] = -df['upper_band']
+    
+    # 4. Generate signals
+    df['buy_signal2'] = df['avpch'] > df['upper_band']
+    df['sell_signal2'] = df['avpch'] < df['lower_band']
+    
+    # Clean up
+    df.dropna(inplace=True)
     return df
-"""
-# Calculate technical components
-def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
+#=================================================================================================================================
+
+def rma(series, period):
+    """Wilder's Moving Average (RMA) calculation"""
+    return series.ewm(alpha=1/period, adjust=False).mean()
+
+def calculate_ma_adx(DF, adx_length=14, adx_smoothing=14, ma_length=34, adx_threshold=18):
+    """
+    Calculate MA ADX indicator with signals
+    Returns DataFrame with indicators and signals
+    """
     df = DF.copy()
     # Calculate True Range
+    df['prev_high'] = df['high'].shift(1)
+    df['prev_low'] = df['low'].shift(1)
     df['prev_close'] = df['close'].shift(1)
-    df['tr'] = np.maximum(
-        df['high'] - df['low'],
-        np.abs(df['high'] - df['prev_close']),
-        np.abs(df['low'] - df['prev_close'])
+    df['tr1'] = df['high'] - df['low']
+    df['tr2'] = abs(df['high'] - df['prev_close'])
+    df['tr3'] = abs(df['low'] - df['prev_close'])
+    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
+    
+    # Calculate Directional Movements
+    df['up'] = df['high'].diff()
+    df['down'] = -df['low'].diff()
+    
+    # Calculate +DM and -DM
+    df['plus_dm'] = np.where((df['up'] > df['down']) & (df['up'] > 0), df['up'], 0)
+    df['minus_dm'] = np.where((df['down'] > df['up']) & (df['down'] > 0), df['down'], 0)
+    
+    # Calculate DI values
+    df['tr_rma'] = rma(df['tr'], adx_length)
+    df['plus_di'] = 100 * rma(df['plus_dm'], adx_length) / df['tr_rma']
+    df['minus_di'] = 100 * rma(df['minus_dm'], adx_length) / df['tr_rma']
+    
+    # Calculate ADX
+    df['dx'] = abs(df['plus_di'] - df['minus_di']) / (df['plus_di'] + df['minus_di']).replace(0, 1)
+    df['adx'] = 100 * rma(df['dx'], adx_smoothing)
+    
+    # Calculate Weighted Moving Average
+    weights = pd.Series(np.arange(1, ma_length+1), index=np.arange(ma_length))
+    df['ma'] = df['close'].rolling(ma_length).apply(
+        lambda x: (x * weights[:len(x)]).sum() / weights[:len(x)].sum())
+    
+    # Generate color signals
+    df['ma_color'] = np.where(
+        (df['adx'] > adx_threshold) & (df['plus_di'] > df['minus_di']), 
+        'green', 
+        np.where(
+            (df['adx'] > adx_threshold) & (df['plus_di'] < df['minus_di']), 
+            'red', 
+            'neutral'
+        )
     )
     
-    # Calculate ATR
-    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
+    # Generate buy/sell signals
+    df['buy_signal3'] = df['ma_color'].eq('green') & df['ma_color'].shift(1).ne('green')
+    df['sell_signal3'] = df['ma_color'].eq('red') & df['ma_color'].shift(1).ne('red')
     
-    # Calculate price mean (simplified EMA)
-    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
-    
-    return df.dropna()
+    return df.dropna().copy()
 
-# Generate MDX signals
-def generate_mdx_signals(df):
-    # Calculate price deviation from mean
-    df['deviation'] = df['close'] - df['price_mean']
-    
-    # Calculate MDX values
-    df['mdx'] = np.where(
-        df['deviation'] > 0,
-        np.maximum(df['deviation'] - df['atr'], 0),
-        np.minimum(df['deviation'] + df['atr'], 0)
-    )
-    
-    # Generate signals (1 for buy, -1 for sell)
-    df['signal2'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
-    df['signal2'] = df['signal2'].replace(0, method='ffill')  # Carry forward signals
-    
-    return df
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -292,72 +303,61 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
     
             df['sar'] = sar
         return df['sar']
-        
 
-# MODIFY SESSION DETECTION:
-def is_session_active(timestamp, session):
-    """Check session status in Lagos time context"""
-    lagos_hour = timestamp.hour  # Already in Lagos time
-    
-    # Session hours in LAGOS TIME (GMT+1)
-    session_hours = {
-        "London": (8, 17),    # 7AM-4PM UTC → 8AM-5PM Lagos
-        "New_York": (13, 22), # 12PM-9PM UTC → 1PM-10PM Lagos
-        "Sydney": (23, 8),    # 10PM-7AM UTC → 11PM-8AM Lagos
-        "Tokyo": (1, 10)      # 12AM-9AM UTC → 1AM-10AM Lagos
-    }[session]
 
-    start, end = session_hours
-    if start <= end:
-        return start <= lagos_hour < end
-    else:
-        return lagos_hour >= start or lagos_hour < end
+#===========================================================================================================================================
 
-# Example usage
 if __name__ == "__main__":
-    # Load your price data (example with random data)
-    symbol = "USDCAD"
+    # Get data from MT5
+    symbol = "AUDUSD"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 35040
-    data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
-    ha_data = calculate_heikin_ashi(data)
-    data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+    data = get_hist_data(symbol, timeframe,num_candles=35040,time_till=None)
     data = data.dropna().copy()
     
-    # Calculate indicator
-    #result2 = calculate_range_filter(data, sampling_period=100, range_multiplier=3.0)#for 5 minutes
-    result2 = calculate_range_filter(data, sampling_period=75, range_multiplier=2.8)#for 15 minutes
-    #result2 = calculate_range_filter(data, sampling_period=50, range_multiplier=2.5)#for 30 minutes
-    #result2 = calculate_range_filter(data, sampling_period=30, range_multiplier=2.2)#for 5 minutes
-    
-    #result1 = calculate_atr(data, period=14) #for 15 minutes | "20" for 30 minutes | "25" for 1 hour
-    #result2 = calculate_trailing_stop(result1, atr_multiplier=2.0) #for 15 minutes | "2.5" for 30 minutes | "3.0" for 1 hour
-    
-    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
-    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
-    
-    result4 = generate_signals1(result2) 
-    result5 = generate_mdx_signals(result3)
-    data['volatility'] = calculate_volatility(data, 34, 2.4)
+    if data is not None:
+        # Generate signals
+        data1 = generate_signals(data, fast_length=45, slow_length=50, 
+                    fast_vol=0.7, slow_vol=0.6, use_heikin_ashi=False)
+        data2 = calculate_trendilo_signals(data, lookback=50, smooth=1, offset=0.85, sigma=6, 
+                            band_mult=1.0, use_custom_band=False, custom_band_len=20)
+        data3 = calculate_ma_adx(data, adx_length=14, adx_smoothing=14, ma_length=34, adx_threshold=18)
+        ha_data = calculate_heikin_ashi(data)
+        data[['ha_open', 'ha_close', 'color']]= ha_data[['ha_open', 'ha_close', 'color']]
+        data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
-    # 1. Convert to proper timezone-aware index
-    data = data.tz_convert('Africa/Lagos') 
-    # 2. Add session flags directly (no separate function needed)
-    data['london_active'] = data.index.map(lambda x: is_session_active(x, "London"))
-    data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
-    data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
-    data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
-    data['signal1'] = result4['signal1']
-    data['signal2'] = result5['signal2']
-    # data['bear_signal'] = result2['bear_signal']
-    # data['bear_signal+'] = result2['bear_signal+']
-    # data['sell_signal2'] = data2['sell_signal2']
-    # data['buy_signal3'] = data3['buy_signal3']
-    
+        data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+        
+        # 1. Create signal copies with unique names
+        data['buy_signal1'] = data1['buy_signal1']
+        data['sell_signal1'] = data1['sell_signal1']
+        data['buy_signal2'] = data2['buy_signal2']
+        data['sell_signal2'] = data2['sell_signal2']
+        data['buy_signal3'] = data3['buy_signal3']
+        data['sell_signal3'] = data3['sell_signal3']
+        
+        # signal_cols = {
+        #     'buy_signal1': data1['buy_signal1'],
+        #     'sell_signal1': data1['sell_signal1'],
+        #     'buy_signal2': data2['buy_signal2'],
+        #     'sell_signal2': data2['sell_signal2'],
+        #     'buy_signal3': data3['buy_signal3'],
+        #     'sell_signal3': data3['sell_signal3']
+        # }
+        
+        # # 2. Add to main dataframe
+        # data = data.assign(**signal_cols)
+        
+        # # 3. Fill any missing signals (due to indicator calculations)
+        # data[signal_cols.keys()] = data[signal_cols.keys()].ffill().fillna(False)
+
+        
+        
+        print("\nLatest Trading Signals:")
+        print(f"Signal1: {data1['buy_signal1']} | {data1['sell_signal1']}")
+        print(f"Signal2: {data2['buy_signal2']} | {data2['sell_signal2']}")
+        print(f"Signal3: {data3['buy_signal3']} | {data3['sell_signal3']}")
+        
+
     signal = None
     data["returns"] = 0.0
     trade_stats = []
@@ -370,18 +370,13 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal1']=='buy')  &  (data.iloc[i]['signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+            if (data.iloc[i]['buy_signal1'] and data.iloc[i]['buy_signal2']
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # # Scale ratios inversely with volatility
-                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -393,17 +388,12 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal1']=='sell')  &  (data.iloc[i]['signal2']==-1)#(data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
-                #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
+            elif (data.iloc[i]['sell_signal1'] and data.iloc[i]['sell_signal2'] and\
+                data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                     sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # # Scale ratios inversely with volatility
-                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -417,7 +407,7 @@ if __name__ == "__main__":
                             
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            max_hold_bars = 12 * 6  # 4 hours for M15
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -439,7 +429,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            max_hold_bars = 12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None
