@@ -331,7 +331,7 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
 # Example usage
 if __name__ == "__main__":
     # Get data from MT5
-    symbol = "AUDUSD"
+    symbol = "USDJPY"
     timeframe = "TIMEFRAME_M15"
     data = get_hist_data(symbol, timeframe,num_candles=35040,time_till=None)
     data = data.dropna().copy()

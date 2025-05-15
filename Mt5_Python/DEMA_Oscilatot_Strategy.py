@@ -216,7 +216,7 @@ if __name__ == "__main__":
     # ======================
     # STRATEGY CONFIGURATION
     # ======================
-    symbol = "AUDCHF"
+    symbol = "USDJPY"
     TIMEFRAME = "TIMEFRAME_M15"
     BARS_TO_FETCH = 36000
     

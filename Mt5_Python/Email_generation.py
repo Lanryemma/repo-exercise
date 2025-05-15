@@ -52,7 +52,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\keyfusionmarket.txt"
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code

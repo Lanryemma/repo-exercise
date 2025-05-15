@@ -23,7 +23,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -37,7 +37,7 @@ else:
 cumulative_pnl = []
 PROFIT_TARGET = 1000    # Set your desired profit target in account currency
 LOSS_LIMIT = -500       # Set your maximum acceptable loss in account currency
-MAX_HOLD_TIME = timedelta(hours=4)  # 4-hour maximum holding period
+MAX_HOLD_TIME = timedelta(hours=24)  # 4-hour maximum holding period
 tz = pytz.timezone("Europe/Kyiv")   # Your existing timezone definition
 
 

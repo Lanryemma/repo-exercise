@@ -150,8 +150,9 @@ def calculate_xmaster_signals(DF, short_ema=10, long_ema=38):
     
     # Generate signals
     df['signal2'] = 0
-    df.loc[df['Normalized'] > 55, 'signal2'] = 1    # Green line
-    df.loc[df['Normalized'] < 45, 'signal2'] = -1   # Red line
+    df.loc[(df['Normalized'] < 55) & (df['Normalized'] > 50), 'signal2'] = 1   # Green line
+    df.loc[(df['Normalized'] < 50) & (df['Normalized'] > 45), 'signal2'] = -1   # Green line
+    #df.loc[df['Normalized'] > 45, 'signal2'] = -1   # Red line
     return df
 
 # Calculate technical components
@@ -205,6 +206,20 @@ def calculate_volatility(DF, length, mult):
             
             # Calculate volatility bands
             return df['atr'] * mult
+        
+
+def calculate_adaptive_sl_tp(df, symbol, risk_reward_ratio=2):
+    """Improved volatility-adjusted SL/TP with dynamic risk management"""
+    df['atr_pips'] = df['volatility'] / get_pip(symbol)
+    
+    # Dynamic multiplier based on recent volatility
+    vol_ratio = df['atr_pips'].rolling(50).mean() / df['atr_pips']
+    sl_mult = np.clip(1.5 * vol_ratio, 1.0, 2.5)
+    tp_mult = sl_mult * risk_reward_ratio
+    
+    df['sl_pips'] = df['atr_pips'] * sl_mult
+    df['tp_pips'] = df['atr_pips'] * tp_mult
+    return df
 
 def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
@@ -252,6 +267,57 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         return df['sar']
         
 
+# Add these near your other utility functions
+def get_pip_value1(symbol, lot_size=100000):
+    """Calculate the value of 1 pip in USD for a given symbol"""
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        raise ValueError(f"Symbol {symbol} not found")
+    
+    point = symbol_info.point
+    pip_size = 10 * point
+    quote_currency = symbol[3:]
+    
+    pip_value_quote = pip_size * lot_size
+    
+    if quote_currency == "USD":
+        return pip_value_quote
+    
+    conversion_symbol = f"{quote_currency}USD"
+    conversion_symbol_info = mt5.symbol_info(conversion_symbol)
+    
+    if not conversion_symbol_info:
+        conversion_symbol = f"USD{quote_currency}"
+        conversion_symbol_info = mt5.symbol_info(conversion_symbol)
+        if not conversion_symbol_info:
+            raise ValueError(f"Cannot find conversion pair for {quote_currency}")
+        
+        conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
+        return pip_value_quote / conversion_rate
+    
+    conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
+    return pip_value_quote * conversion_rate
+
+def get_pos_size2(symbol, risk_amount, stop_loss_pips):
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        raise ValueError(f"Symbol {symbol} not found")
+    
+    pip_value_per_lot = get_pip_value1(symbol)
+    risk_per_lot = stop_loss_pips * pip_value_per_lot
+    
+    if risk_per_lot <= 0:
+        raise ValueError("Invalid risk calculation")
+    
+    raw_position_size = risk_amount / risk_per_lot
+    volume_step = symbol_info.volume_step
+    position_size = round(raw_position_size / volume_step) * volume_step
+    
+    position_size = max(position_size, symbol_info.volume_min)
+    position_size = min(position_size, symbol_info.volume_max)
+    
+    return position_size
+
 # MODIFY SESSION DETECTION:
 def is_session_active(timestamp, session):
     """Check session status in Lagos time context"""
@@ -271,16 +337,32 @@ def is_session_active(timestamp, session):
     else:
         return lagos_hour >= start or lagos_hour < end
 
+
+def is_pre_weekly_close(timestamp):
+    """Check if within 5 minutes of weekly market close (Friday 20:55-21:00 Kyiv time)"""
+    kyiv_tz = pytz.timezone('Europe/Kyiv')
+    kyiv_time = timestamp.astimezone(kyiv_tz)
+    return (
+        kyiv_time.weekday() == 4 and  # Friday
+        kyiv_time.hour == 20 and 
+        kyiv_time.minute >= 45
+    )
+
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURJPY"
+    symbol = "EURUSD"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 9040
+    num_candles = 3000
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
+    
+    RISK_PER_TRADE = 5  # $10 risk per trade
+    
+    COMMISSION = 0.0     # $0 if no commission
+
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
@@ -308,6 +390,7 @@ if __name__ == "__main__":
     result4 = generate_mdx_signals(result3)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
+    data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
     data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
     # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
@@ -323,6 +406,14 @@ if __name__ == "__main__":
     # data['bear_signal+'] = result2['bear_signal+']
     # data['sell_signal2'] = data2['sell_signal2']
     # data['buy_signal3'] = data3['buy_signal3']
+    def calculate_trade_pnl(trade):
+        if trade['dir'] == 'long':
+            pips = (trade['close_price'] - trade['open_price'])/get_pip(symbol)
+        elif trade['dir'] == 'short':
+            pips = (trade['open_price'] - trade['close_price'])/get_pip(symbol)
+                
+        dollar_pnl = (pips * trade['pip_value']) - trade['fees_paid']
+        return dollar_pnl
     
     signal = None
     data["returns"] = 0.0
@@ -335,19 +426,47 @@ if __name__ == "__main__":
     
     for i in range(len(data)-1):
         
+        current_time = data.index[i]  # <-- This is where the timestamp comes from
+            # ======== NEW CODE START ======== (COMMENT: Weekly close check)
+        if is_pre_weekly_close(current_time) and signal is not None:
+            if signal == 'long':
+                close_price = data.iloc[i-1,cp_index]  # Exit at next bar's open
+                trade_stats[-1]["close_price"] = close_price
+                #data.iloc[i,returns_index] = (close_price - trade_stats[-1]["open_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
+                signal = None
+            elif signal == 'short':
+                close_price = data.iloc[i-1,cp_index]  # Exit at next bar's open
+                trade_stats[-1]["close_price"] = close_price
+                #data.iloc[i,returns_index] = (trade_stats[-1]["open_price"] - close_price)/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
+                signal = None
+        
         if signal == None:
-            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==1)  & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) 
+            
+            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
                     # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
                     # tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    #sl_pips = data.iloc[i]['sl_pips']
+                    #tp_pips = data.iloc[i]['tp_pips']
+                    # Calculate position size based on risk
+                    try:
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
+                    except Exception as e:
+                        print(f"Position sizing error: {e}")
+                        continue
+                    SPREAD_COST1 = pos_size*5    # $2 per round trip (adjust based on your broker)
+                    # Store risk management parameters
+                    pip_value = get_pip_value1(symbol) * pos_size
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -357,19 +476,34 @@ if __name__ == "__main__":
                                         #"sl_price":data[0].iloc[i+1,op_index] + 0.3*(data[0].iloc[i+1,hi_index] - data[0].iloc[i+1,op_index]) - 10*get_pip(symbol),
                                         #"tp_price":data[0].iloc[i+1,op_index] + 0.3*(data[0].iloc[i+1,hi_index] - data[0].iloc[i+1,op_index]) + 20*get_pip(symbol)
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
-                                        "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
-        
-            elif ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==-1)  & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'])
+                                        "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol),
+                                        "risk_amount": RISK_PER_TRADE,
+                                        "position_size": pos_size,
+                                        "pip_value": pip_value,
+                                        "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
+                    
+            
+            if ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==-1)  & (data.iloc[i]['newyork_active'] | data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
                     # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
                     # tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    #sl_pips = data.iloc[i]['sl_pips']
+                    #tp_pips = data.iloc[i]['tp_pips']
+                    try:
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
+                    except Exception as e:
+                        print(f"Position sizing error: {e}")
+                        continue
+                    SPREAD_COST2 = pos_size*5    # $2 per round trip (adjust based on your broker)
+                    # Store risk management parameters
+                    pip_value = get_pip_value1(symbol) * pos_size
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -379,29 +513,37 @@ if __name__ == "__main__":
                                         #"sl_price":data[0].iloc[i+1,op_index] - 0.3*(data[0].iloc[i+1,op_index] - data[0].iloc[i+1,lo_index]) + 10*get_pip(symbol),
                                         #"tp_price":data[0].iloc[i+1,op_index] - 0.3*(data[0].iloc[i+1,op_index] - data[0].iloc[i+1,lo_index]) - 20*get_pip(symbol)
                                         "sl_price":data.iloc[i+1,op_index]  + sl_pips * get_pip(symbol),
-                                        "tp_price":data.iloc[i+1,op_index]  - tp_pips * get_pip(symbol)})                 
+                                        "tp_price":data.iloc[i+1,op_index]  - tp_pips * get_pip(symbol),
+                                        "risk_amount": RISK_PER_TRADE,
+                                        "position_size": pos_size,
+                                        "pip_value": pip_value,
+                                        "fees_paid": SPREAD_COST2 + (COMMISSION * 2)})                 
                             
+        
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
             max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
             if data.iloc[i,hi_index] > trade_stats[-1]["tp_price"]: 
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["tp_price"] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+                #data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif data.iloc[i,lo_index] < trade_stats[-1]["sl_price"]: 
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+                #data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif current_sar > trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
-                
+                #data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
@@ -410,23 +552,61 @@ if __name__ == "__main__":
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["tp_price"] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+                #data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif data.iloc[i,hi_index] > trade_stats[-1]["sl_price"]: 
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-            elif current_sar > trade_stats[-1]["sl_price"]:
+                #data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
+            elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
-                data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+                #data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+                data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
         # # if symbol == "USDSEK": 
         #     candle_data.iloc[i,-1] = candle_data.iloc[i,-1]/5 #adjust for pos size of USDSEK            
     if trade_stats and trade_stats[-1]["close_price"] == None:
         trade_stats[-1]["close_price"] = data.iloc[-1,cp_index] #update the cp of last trade as the current price
+    
+    
+    # After processing all trades, add this analysis:
+    total_wins = 0
+    total_losses = 0
+    gross_profit = 0
+    gross_loss = 0
+    net_profit = 0
 
+    for trade in trade_stats:
+        if trade['close_price'] is not None:
+            pnl = calculate_trade_pnl(trade)
+            net_profit += pnl
+            if pnl > 0:
+                total_wins += 1
+                gross_profit += pnl
+            else:
+                total_losses += 1
+                gross_loss += abs(pnl)
 
+    print("\n=== Risk-Adjusted Performance ===")
+    print(f"Fixed Risk per Trade: ${RISK_PER_TRADE}")
+    print(f"Total Trades: {len(trade_stats)}")
+    print(f"Gross Profit: ${gross_profit:.2f}")
+    print(f"Gross Loss: ${gross_loss:.2f}")
+    print(f"Net Profit: ${net_profit:.2f}")
+    print(f"Profit Factor: {gross_profit/max(gross_loss, 1):.2f}")
+    print(f"Commission & Spread Costs: ${len(trade_stats) * ((SPREAD_COST2) + COMMISSION):.2f}")
+    print("Number of trades taken:", len(trade_stats))
+
+    # Modify your equity curve plotting:
+    cumulative_pnl = [calculate_trade_pnl(trade) for trade in trade_stats if trade['close_price'] is not None]
+    cumulative_series = pd.Series(cumulative_pnl).cumsum()
+    cumulative_series.plot(title=f"Equity Curve (Risk per Trade: ${RISK_PER_TRADE})")
+    plot.ylabel("Dollar P&L")
+    plot.show()
+    """
     #print backtesting results
     retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
     print(retun)
@@ -436,9 +616,10 @@ if __name__ == "__main__":
     print("average pip return per losing trade = {:.2f}".format(mean_ret_loser_pip(trade_stats, symbol)))
     print("maximum drawdown in pips = {:.2f}".format(max_drawdown(data)))
     #monthly_performance(returns_df)
-
+    
     print("Number of trades taken:", len(trade_stats))
 
     #plot equity curve in terms of pip
     data["returns"].cumsum().plot()
     plot.show()
+    """

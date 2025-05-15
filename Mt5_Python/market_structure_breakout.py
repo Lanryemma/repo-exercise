@@ -257,6 +257,19 @@ def calculate_volatility(DF, length, mult):
             # Calculate volatility bands
             return df['atr'] * mult
 
+def calculate_adaptive_sl_tp(df, symbol, risk_reward_ratio=2):
+    """Improved volatility-adjusted SL/TP with dynamic risk management"""
+    df['atr_pips'] = df['volatility'] / get_pip(symbol)
+    
+    # Dynamic multiplier based on recent volatility
+    vol_ratio = df['atr_pips'].rolling(50).mean() / df['atr_pips']
+    sl_mult = np.clip(1.5 * vol_ratio, 1.0, 2.5)
+    tp_mult = sl_mult * risk_reward_ratio
+    
+    df['sl_pips'] = df['atr_pips'] * sl_mult
+    df['tp_pips'] = df['atr_pips'] * tp_mult
+    return df
+
 def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
@@ -303,6 +316,56 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         return df['sar']
         
 
+# Add these near your other utility functions
+def get_pip_value1(symbol, lot_size=100000):
+    """Calculate the value of 1 pip in USD for a given symbol"""
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        raise ValueError(f"Symbol {symbol} not found")
+    
+    point = symbol_info.point
+    pip_size = 10 * point
+    quote_currency = symbol[3:]
+    
+    pip_value_quote = pip_size * lot_size
+    
+    if quote_currency == "USD":
+        return pip_value_quote
+    
+    conversion_symbol = f"{quote_currency}USD"
+    conversion_symbol_info = mt5.symbol_info(conversion_symbol)
+    
+    if not conversion_symbol_info:
+        conversion_symbol = f"USD{quote_currency}"
+        conversion_symbol_info = mt5.symbol_info(conversion_symbol)
+        if not conversion_symbol_info:
+            raise ValueError(f"Cannot find conversion pair for {quote_currency}")
+        
+        conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
+        return pip_value_quote / conversion_rate
+    
+    conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
+    return pip_value_quote * conversion_rate
+
+def get_pos_size2(symbol, risk_amount, stop_loss_pips):
+    symbol_info = mt5.symbol_info(symbol)
+    if not symbol_info:
+        raise ValueError(f"Symbol {symbol} not found")
+    
+    pip_value_per_lot = get_pip_value1(symbol)
+    risk_per_lot = stop_loss_pips * pip_value_per_lot
+    
+    if risk_per_lot <= 0:
+        raise ValueError("Invalid risk calculation")
+    
+    raw_position_size = risk_amount / risk_per_lot
+    volume_step = symbol_info.volume_step
+    position_size = round(raw_position_size / volume_step) * volume_step
+    
+    position_size = max(position_size, symbol_info.volume_min)
+    position_size = min(position_size, symbol_info.volume_max)
+    
+    return position_size
 # Get price data
 #______________________________________________________________________________________________________________________________________________________________
 
@@ -326,7 +389,8 @@ data = generate_signals(data, msb_lines)
 #print( msb_lines)
 data['volatility'] = calculate_volatility(data, 34, 2.4)
 #print(data['volatility'].tail(20))
-data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
+data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
 #print(data['sar'].tail(20))
 # In your strategy implementation section, add:
 data['stc'] = calculate_stc(data)
@@ -339,6 +403,18 @@ print(data[['close', 'trailing_stop', 'signal', 'color']].tail(20))
 #_________________________________________________________________________________________________________________________________________________________
 # Main execution
 #____________________________________________________________________________________________________________________________________________________________________
+RISK_PER_TRADE = 5  # $10 risk per trade
+COMMISSION = 0.0     # $0 if no commission
+
+def calculate_trade_pnl(trade):
+        if trade['dir'] == 'long':
+            pips = (trade['close_price'] - trade['open_price'])/get_pip(symbol)
+        else:
+            pips = (trade['open_price'] - trade['close_price'])/get_pip(symbol)
+                
+        dollar_pnl = (pips * trade['pip_value']) - trade['fees_paid']
+        return dollar_pnl
+
 signal = None
 data["returns"] = 0
 trade_stats = []
@@ -370,13 +446,15 @@ for i in range(len(data)-1):
     
     if signal == None:
         if (data.iloc[i,hstgrm_index] > 0 and data.iloc[i-1,hstgrm_index] > 0  and data.iloc[i,buy_signal_index] == True and\
-            data.iloc[i,signal_index] == 1  and data.iloc[i,ha_color] == 'green' and data.iloc[i-1,ha_color] == 'green' and\
-                data.iloc[i,stc_index] > 10 and  data.iloc[i,stc_index] > data.iloc[i-1,stc_index]      # STC above 25 = bullish momentum
+            data.iloc[i,signal_index] == 1  and data.iloc[i,ha_color] == 'green' and data.iloc[i-1,ha_color] == 'green' 
+                #data.iloc[i,stc_index] > 10 and  data.iloc[i,stc_index] > data.iloc[i-1,stc_index]      # STC above 25 = bullish momentum
             ):
                 
                 atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                 sl_pips = 1.5 * atr  # 1.5x ATR
                 tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                # sl_pips = data.iloc[i]['sl_pips']
+                # tp_pips = data.iloc[i]['tp_pips']
                 signal = 'long'
                 trade_stats.append({"time":data.index[i],
                                     "entry_bar": i,
@@ -389,12 +467,14 @@ for i in range(len(data)-1):
                                     "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
     
         elif (data.iloc[i,hstgrm_index] < 0 and data.iloc[i-2,hstgrm_index] < 0  and data.iloc[i,sell_signal_index] == True    and\
-            data.iloc[i,signal_index] == -1  and data.iloc[i,ha_color] == 'red' and data.iloc[i-1,ha_color] == 'red' and\
-                data.iloc[i,stc_index] < 90 and  data.iloc[i,stc_index] < data.iloc[i-1,stc_index]      # STC below 75 = bullish momentum
+            data.iloc[i,signal_index] == -1  and data.iloc[i,ha_color] == 'red' and data.iloc[i-1,ha_color] == 'red' 
+                #data.iloc[i,stc_index] < 90 and  data.iloc[i,stc_index] < data.iloc[i-1,stc_index]      # STC below 75 = bullish momentum
                 ):
                 atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                 sl_pips = 1.5 * atr  # 1.5x ATR
                 tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                # sl_pips = data.iloc[i]['sl_pips']
+                # tp_pips = data.iloc[i]['tp_pips']
                 signal = 'short'
                 trade_stats.append({"time":data.index[i],
                                     "entry_bar": i,
@@ -440,7 +520,7 @@ for i in range(len(data)-1):
             signal = None
             trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
             data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-        elif current_sar > trade_stats[-1]["sl_price"]:
+        elif current_sar < trade_stats[-1]["sl_price"]:
             trade_stats[-1]["sl_price"] = current_sar
         elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
             signal = None

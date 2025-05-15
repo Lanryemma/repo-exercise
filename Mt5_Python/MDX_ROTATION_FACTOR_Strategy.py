@@ -232,7 +232,7 @@ def is_session_active(timestamp, session):
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "NZDUSD"
+    symbol = "GBPJPY"
     timeframe = "TIMEFRAME_M15"
     num_candles = 35040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )

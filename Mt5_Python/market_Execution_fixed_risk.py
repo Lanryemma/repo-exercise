@@ -7,8 +7,10 @@ import pytz
 from pandas import Series
 import time
 from Email_generation import send_email
-from Get_position_size import get_pos_size
+#from Get_position_size import get_pos_size
 from market_structure_breakout import parabolic_sar,calculate_volatility, MACD, calculate_heikin_ashi,calculate_atr_trailing, generate_signals,calculate_zigzag, detect_msb
+import os
+from openpyxl import Workbook
 
 
 # display data on the MetaTrader 5 package
@@ -23,7 +25,7 @@ print("MetaTrader5 package version: ",mt5.__version__)
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\keyfusionmarket.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5 Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -35,9 +37,10 @@ else:
     print("connection established")
 
 cumulative_pnl = []
+weekly_trades = []
 PROFIT_TARGET = 1000    # Set your desired profit target in account currency
 LOSS_LIMIT = -500       # Set your maximum acceptable loss in account currency
-MAX_HOLD_TIME = timedelta(hours=4)  # 4-hour maximum holding period
+MAX_HOLD_TIME = timedelta(hours=24)  # 24-hour maximum holding period
 tz = pytz.timezone("Europe/Kyiv")   # Your existing timezone definition
 
 
@@ -75,7 +78,38 @@ def get_hist_data_numeric_index(symbol, timeframe, start_pos=0, num_candles=200)
 
 
 #________________________________________________________________________________________________________________________________________________
-
+# Add this function anywhere in the utilities section
+def generate_weekly_report():
+    global weekly_trades
+    if not weekly_trades:
+        return None
+    
+    # Create DataFrame
+    report_df = pd.DataFrame(weekly_trades)
+    
+    # Calculate duration
+    report_df['duration'] = report_df['close_time'] - report_df['open_time']
+    
+    # Format columns
+    numeric_cols = ['open_price', 'close_price', 'sl', 'tp', 'pnl']
+    report_df[numeric_cols] = report_df[numeric_cols].round(5)
+    
+    # Create filename with week number
+    now = datetime.now(tz)
+    week_num = now.isocalendar()[1]
+    filename = f"Weekly_Trade_Report_Week_{week_num}.xlsx"
+    filepath = os.path.join(os.getcwd(), filename)
+    
+    # Save to Excel with formatting
+    with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+        report_df.to_excel(writer, index=False)
+        
+        # Access worksheet and apply formatting
+        worksheet = writer.sheets['Sheet1']
+        for column in ['D', 'E', 'F', 'G', 'H']:
+            worksheet.column_dimensions[column].width = 15
+            
+    return filepath
 
 
 #______________________________________________________________________________________________________________________________________________________________
@@ -308,7 +342,7 @@ def main(symbol):
         msb_lines = detect_msb(data1, data1['zigzag'])
         data1 = generate_signals(data1, msb_lines)
         data1['volatility'] = calculate_volatility(data1, 34, 2.4)
-        data1['sar'] = parabolic_sar(data1)
+        data1['sar'] = parabolic_sar(data1,step=0.04, max_step=0.3)
         current_sar = data1.iloc[-1]['sar']
 
         open_pos = get_position_df()
@@ -331,10 +365,6 @@ def main(symbol):
                 # Time-based exit check
                 if hold_duration >= MAX_HOLD_TIME:
                     print(f"Time-based exit triggered for {symbol}")
-                    signal = "Close"
-                
-                if market_is_closed(kyiv_tz):
-                    print(f"The market has closed for the week {symbol}")
                     signal = "Close"
                 
                 # SAR Trailing Stop Update
@@ -380,6 +410,22 @@ def main(symbol):
             stop_loss_pips = (current_price - Bsl_pips)/get_pip(symbol)
             pos_size = get_pos_size2(symbol, 10, stop_loss_pips)
             place_bracket_order(symbol, pos_size, signal, Bsl_pips, Btp_pips)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                order = mt5.orders_get(ticket=result.order)[0]
+                weekly_trades.append({
+                    'ticket': order.ticket,
+                    'symbol': symbol,
+                    'type': signal,
+                    'lot_size': order.volume,
+                    'open_time': order.time_setup,
+                    'open_price': order.price_open,
+                    'sl': order.sl,
+                    'tp': order.tp,
+                    'close_time': None,
+                    'close_price': None,
+                    'pnl': None,
+                    'close_type': None
+                })
             # ... (rest of buy logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
@@ -391,8 +437,24 @@ def main(symbol):
             Ssl_pips = current_price + sl_pips * get_pip(symbol)
             Stp_pips = current_price - 3.0 * atr.iloc[-2] * get_pip(symbol)
             stop_loss_pips1 = (Ssl_pips - current_price)/get_pip(symbol)
-            pos_size1 = get_pos_size2(symbol, 10, stop_loss_pips1)
+            pos_size1 = get_pos_size2(symbol, 15, stop_loss_pips1)
             place_bracket_order(symbol, pos_size1, signal, Ssl_pips, Stp_pips)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                order = mt5.orders_get(ticket=result.order)[0]
+                weekly_trades.append({
+                    'ticket': order.ticket,
+                    'symbol': symbol,
+                    'type': signal,
+                    'lot_size': order.volume,
+                    'open_time': order.time_setup,
+                    'open_price': order.price_open,
+                    'sl': order.sl,
+                    'tp': order.tp,
+                    'close_time': None,
+                    'close_price': None,
+                    'pnl': None,
+                    'close_type': None
+                })
             # ... (rest of sell logic)
             print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
             send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
@@ -404,8 +466,18 @@ def main(symbol):
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 closed_pos = mt5.positions_get(ticket=result.order)
                 if closed_pos:
-                    profit = closed_pos[0].profit
+                    pos = closed_pos[0]
+                    profit = pos[0].profit
                     cumulative_pnl.append(profit)
+                    # Update trade record
+                    trade = next((t for t in weekly_trades if t['ticket'] == pos.ticket), None)
+                    if trade:
+                        trade.update({
+                            'close_time': pos.time,
+                            'close_price': pos.price_current,
+                            'pnl': profit,
+                            'close_type': 'Time Exit' if hold_duration >= MAX_HOLD_TIME else 'Strategy Exit'
+                        })
                     print(f"Closed position P&L: {profit} | Running Total: {sum(cumulative_pnl)}")
             print("{}: Existing {} position closed for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
             send_email("{}: Existing {} position closed for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), long_short, symbol))
@@ -465,6 +537,8 @@ if __name__ == "__main__":
             exit()
 """
 
+#============================================================================================================================
+
 #To close the market when its weekend/ch
 def market_is_closed(tz):
     now = datetime.now(tz)
@@ -478,17 +552,69 @@ def market_is_closed(tz):
         return True
     
     # Session hours check (e.g., FX market closed 21:00-21:15 daily)
-    if time(21, 0) <= now.time() < time(21, 15):
+    if dt.time(21, 0) <= now.time() < dt.time(21, 15):
         return True
     
     return False
+
+def is_near_weekly_close(tz):
+    """Check if current time is 5 minutes before weekly market close"""
+    now = datetime.now(tz)
+    return (
+        now.weekday() == 4 and  # Friday
+        now.hour == 20 and      # 20:55-21:00 Kyiv time
+        now.minute >= 55
+    )
+
+def close_all_positions():
+    """Close all open positions"""
+    positions = mt5.positions_get()
+    if len(positions) > 0:
+        print(f"{datetime.now(tz)}: Closing all positions before market close")
+        send_email("Closing all positions before weekly market closure")
+        
+        for pos in positions:
+            close_position(pos.symbol, pos.ticket)
+            if pos.profit != 0:
+                cumulative_pnl.append(pos.profit)
+        send_email(f"This week cumulative profit or loss is{cumulative_pnl} ")
+        # Update trade record
+        trade = next((t for t in weekly_trades if t['ticket'] == pos.ticket), None)
+        if trade and trade['close_time'] is None:
+            trade.update({
+                'close_time': pos.time,
+                'close_price': pos.price_current,
+                'pnl': pos.profit,
+                'close_type': 'Weekly Close'
+            })
+            
+        # Generate and send report
+        report_path = generate_weekly_report()
+        if report_path:
+            send_email("Weekly Trade Report", attachments=[report_path])
+            os.remove(report_path)  # Clean up file after sending
+            
+        send_email(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
+        weekly_trades = []
+    else:
+        print("No positions to close")
+        send_email("No positions to close")
+        send_email(f"This week cumulative profit or loss is{cumulative_pnl} ")
+        # Generate and send report
+        report_path = generate_weekly_report()
+        if report_path:
+            send_email("Weekly Trade Report", attachments=[report_path])
+            os.remove(report_path)  # Clean up file after sending
+            
+        send_email(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
+        weekly_trades = []
 
 def calculate_sleep_duration(tz):
     """Returns seconds until market reopens"""
     now = datetime.now(tz)
     
     # 1. Daily maintenance break (21:00-21:15)
-    if time(21, 0) <= now.time() < time(21, 15):
+    if dt.time(21, 0) <= now.time() < dt.time(21, 15):
         next_open = now.replace(hour=21, minute=15, second=0, microsecond=0)
         return max((next_open - now).total_seconds(), 0)
     
@@ -519,6 +645,10 @@ if __name__ == "__main__":
         # if time.time() > timeout:  # Global timeout first
         #     print("Maximum runtime reached")
         #     break
+        if is_near_weekly_close(kyiv_tz):
+            close_all_positions()
+            # Sleep through market closure period
+            continue
         
         if market_is_closed(kyiv_tz):
             sleep_sec = calculate_sleep_duration(kyiv_tz)
