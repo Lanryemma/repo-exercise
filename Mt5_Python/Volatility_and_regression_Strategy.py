@@ -211,9 +211,9 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    symbol = "GBPUSD"
+    symbol = "USDJPY"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 35040
+    num_candles = 23040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     data = data.dropna().copy()
     
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     result2 = generate_signals(result1)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
     
     data['bull_signal'] = result2['bull_signal']
     data['bull_signal+'] = result2['bull_signal+']
@@ -251,14 +251,14 @@ if __name__ == "__main__":
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    # sl_pips = 1.5 * atr  # 1.5x ATR
-                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # Scale ratios inversely with volatility
-                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'long'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -273,14 +273,14 @@ if __name__ == "__main__":
             elif (data.iloc[i]['bear_signal+'] and data.iloc[i]['state']==-1
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
-                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    # sl_pips = 1.5 * atr  # 1.5x ATR
-                    # tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
-                    atr = data.iloc[i]['volatility'] / get_pip(symbol)
-                    volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
-                    # Scale ratios inversely with volatility
-                    sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
-                    tp_pips = 2.4 * atr * (1 + volatility_ratio)
+                    atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    # atr = data.iloc[i]['volatility'] / get_pip(symbol)
+                    # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
+                    # # Scale ratios inversely with volatility
+                    # sl_pips = 1.2 * atr * (1 + (1/volatility_ratio))
+                    # tp_pips = 2.4 * atr * (1 + volatility_ratio)
                     signal = 'short'
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
@@ -326,7 +326,7 @@ if __name__ == "__main__":
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
                 data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-            elif current_sar > trade_stats[-1]["sl_price"]:
+            elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None

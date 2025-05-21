@@ -449,7 +449,7 @@ if __name__ == "__main__":
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
                 data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-            elif current_sar > trade_stats[-1]["sl_price"]:
+            elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None

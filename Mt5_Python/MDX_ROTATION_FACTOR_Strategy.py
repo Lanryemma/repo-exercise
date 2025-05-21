@@ -233,8 +233,8 @@ def is_session_active(timestamp, session):
 if __name__ == "__main__":
     # Load your price data (example with random data)
     symbol = "GBPJPY"
-    timeframe = "TIMEFRAME_M15"
-    num_candles = 35040
+    timeframe = "TIMEFRAME_M30"
+    num_candles = 3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     data = data.dropna().copy()
     
@@ -242,8 +242,8 @@ if __name__ == "__main__":
     #results = calculate_regression_indicator(data)
     #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
     #result1 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result1 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
+    #result1 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
+    result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
     #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
     result2 = calculate_scores(data)  # 200 bars ≈ 2 days
     #result1 = calculate_bands(data, length=20, distance=2.0, vol_period=100)
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     result4 = generate_signals(result2)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
     # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -278,13 +278,13 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active']) 
+            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -301,12 +301,12 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) #& (data.iloc[i]['sydney_active'] | data.iloc[i]['newyork_active'])
+            elif ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -325,7 +325,7 @@ if __name__ == "__main__":
                             
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            max_hold_bars = 48 #12 * 6  # 4 hours for M15
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
             #candle_data.iloc[i,-1] = (trade_stats[-1]["close_price"] - candle_data.iloc[i,op_index])/get_pip(symbol)
@@ -347,7 +347,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            max_hold_bars = 48#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None
@@ -357,7 +357,7 @@ if __name__ == "__main__":
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
                 data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-            elif current_sar > trade_stats[-1]["sl_price"]:
+            elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None

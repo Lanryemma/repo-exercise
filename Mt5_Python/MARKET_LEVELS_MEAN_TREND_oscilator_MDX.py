@@ -360,7 +360,7 @@ if __name__ == "__main__":
     for i in range(len(data)-1):
         
         if signal == None:
-            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'] | data.iloc[i]['newyork_active'])  #&  (data.iloc[i]['signal2']==1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) & (data.iloc[i]['signal2']==1)& (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])# | data.iloc[i]['Tokyo_active'] )  #&  (data.iloc[i]['signal2']==1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
@@ -383,7 +383,7 @@ if __name__ == "__main__":
                                         "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                         "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
         
-            elif ((data.iloc[i]['signal3']==-1) &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'] | data.iloc[i]['newyork_active'])  #&  (data.iloc[i]['signal1']==-1)  #&  (data.iloc[i]['signal2']==-1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'])
+            elif ((data.iloc[i]['signal3']==-1) &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['signal1']==-1) & (data.iloc[i]['london_active']  | data.iloc[i]['newyork_active'])#| data.iloc[i]['Tokyo_active'])  #&  (data.iloc[i]['signal1']==-1)  #&  (data.iloc[i]['signal2']==-1)  #& (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
@@ -439,7 +439,7 @@ if __name__ == "__main__":
                 signal = None
                 trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
                 data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-            elif current_sar > trade_stats[-1]["sl_price"]:
+            elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None

@@ -66,7 +66,7 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
         print(f"Failed to fetch data. MT5 Error: {mt5.last_error()}")
         return pd.DataFrame()
     hist_data_df = pd.DataFrame(hist_data) 
-    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s")
+    hist_data_df.time = pd.to_datetime(hist_data_df.time, unit="s").dt.tz_localize('UTC')
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
@@ -208,6 +208,24 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         return df['sar']
 
 
+def is_session_active(timestamp, session):
+    """Check session status in Lagos time context"""
+    lagos_hour = timestamp.hour  # Already in Lagos time
+    
+    # Session hours in LAGOS TIME (GMT+1)
+    session_hours = {
+        "London": (8, 17),    # 7AM-4PM UTC → 8AM-5PM Lagos
+        "New_York": (13, 22), # 12PM-9PM UTC → 1PM-10PM Lagos
+        "Sydney": (23, 8),    # 10PM-7AM UTC → 11PM-8AM Lagos
+        "Tokyo": (1, 10)      # 12AM-9AM UTC → 1AM-10AM Lagos
+    }[session]
+
+    start, end = session_hours
+    if start <= end:
+        return start <= lagos_hour < end
+    else:
+        return lagos_hour >= start or lagos_hour < end
+
 # ======================
 # MAIN PROCESSING
 # ======================
@@ -241,7 +259,13 @@ if __name__ == "__main__":
                                 short_thresh=SHORT_THRESH)
         data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
-        data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+        data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+        data = data.tz_convert('Africa/Lagos') 
+        # 2. Add session flags directly (no separate function needed)
+        data['london_active'] = data.index.map(lambda x: is_session_active(x, "London"))
+        data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
+        data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
+        data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
         
         signal = None
         data["returns"] = 0.0
@@ -255,7 +279,7 @@ if __name__ == "__main__":
         for i in range(len(data)-1):
             
             if signal == None:
-                if (signals['Position'].iloc[i] == 1 #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
+                if ((signals['Position'].iloc[i] == 1) & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])#signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                     ):
                         
                         atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
@@ -272,7 +296,7 @@ if __name__ == "__main__":
                                             "sl_price":data.iloc[i+1,op_index]  - sl_pips * get_pip(symbol),
                                             "tp_price":data.iloc[i+1,op_index]  + tp_pips * get_pip(symbol)})
             
-                elif (signals['Position'].iloc[i] == -1 #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
+                elif ((signals['Position'].iloc[i] == -1) & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active']) #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                         ):
                         atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
                         sl_pips = 1.5 * atr  # 1.5x ATR
@@ -322,7 +346,7 @@ if __name__ == "__main__":
                     signal = None
                     trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
                     data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-                elif current_sar > trade_stats[-1]["sl_price"]:
+                elif current_sar < trade_stats[-1]["sl_price"]:
                     trade_stats[-1]["sl_price"] = current_sar
                 elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                     signal = None

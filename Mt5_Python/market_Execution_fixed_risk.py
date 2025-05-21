@@ -204,7 +204,26 @@ def get_position_df():
         
     return pos_df
 
+def get_pip(symbol):
+    return 10*mt5.symbol_info(symbol).point  
 
+def is_session_active(timestamp, session):
+    """Check session status in Lagos time context"""
+    lagos_hour = timestamp.hour  # Timestamp must already be in Lagos time
+    
+    # Session hours in LAGOS TIME (GMT+1)
+    session_hours = {
+        "London": (8, 17),    # 8AM-5PM Lagos
+        "New_York": (13, 22), # 1PM-10PM Lagos
+        "Sydney": (23, 8),    # 11PM-8AM Lagos
+        "Tokyo": (1, 10)      # 1AM-10AM Lagos
+    }[session]
+
+    start, end = session_hours
+    if start <= end:
+        return start <= lagos_hour < end
+    else:
+        return lagos_hour >= start or lagos_hour < end
 
 
 #______________________________________________________________________________________________________________________________________________________________
@@ -220,11 +239,16 @@ def trade_signal(data,l_s):
     ha_color = data.columns.to_list().index("color")
     
     if l_s == "":
+        # Get session status for last completed candle
+        candle_time = data.index[-2]
+        lagos_time = candle_time.astimezone(pytz.timezone("Africa/Lagos"))
+        session_active = (is_session_active(lagos_time, "London") 
+                            or is_session_active(lagos_time, "New_York"))
         if data.iloc[-2,hstgrm_index] > 0 and data.iloc[-3,hstgrm_index] > 0 and data.iloc[-2,buy_signal_index] == True  and\
-            data.iloc[-2,signal_index] == 1 and data.iloc[-2,ha_color] == 'green': #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
+            data.iloc[-2,signal_index] == 1 and data.iloc[-2,ha_color] == 'green' and session_active: #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
             signal = "Buy"
         elif data.iloc[-2,hstgrm_index] < 0 and data.iloc[-3,hstgrm_index] < 0 and data.iloc[-2,sell_signal_index] == True  and\
-            data.iloc[-2,signal_index] == -1 and data.iloc[-2,ha_color] == 'red':
+            data.iloc[-2,signal_index] == -1 and data.iloc[-2,ha_color] == 'red' and session_active:
             signal = "Sell"
             
     # elif l_s == "long":

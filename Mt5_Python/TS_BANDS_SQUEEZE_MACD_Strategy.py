@@ -306,7 +306,7 @@ if __name__ == "__main__":
     # Load your price data (example with random data)
     symbol = "EURUSD"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 35040
+    num_candles = 23040
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     result1 = calculate_macd_histogram(data, fast=12, slow=26, signal=9)# for 1
     data = data.dropna().copy()

@@ -346,13 +346,13 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
     symbol = "GBPJPY"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 3000
+    num_candles = 7680
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     ha_data = calculate_heikin_ashi(data)
     data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
-    RISK_PER_TRADE = 5  # $10 risk per trade
-    COMMISSION = 0.0     # $0 if no commission
+    RISK_PER_TRADE = 6  # $10 risk per trade
+    COMMISSION = 0.1     # $0 if no commission
     
     # Calculate indicator
         # Scalping (M1-M15)
@@ -369,7 +369,7 @@ if __name__ == "__main__":
     #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
     #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
     result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result1 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
+    #result3 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
     #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
     
     result1 = calculate_ema_signals(data, fast_len=12, slow_len=25)
@@ -379,7 +379,7 @@ if __name__ == "__main__":
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
-    data['sar'] = parabolic_sar(data, step=0.04, max_step=0.3)
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
     # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -432,12 +432,12 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==1)  & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -470,12 +470,12 @@ if __name__ == "__main__":
                                         "pip_value": pip_value,
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
-            if ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==-1)  & (data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active'])
+            if ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
-                    tp_pips = 3.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility

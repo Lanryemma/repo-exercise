@@ -48,7 +48,7 @@ def RMA(series, period):
     #  Calculate the Relative Moving Average (RMA) using Pandas.
     return series.ewm(alpha=1/period, adjust=False).mean()
 
-def RSI(DF, n=5):
+def RSI(DF, n=6):
     "function to calculate RSI"
     df = DF.copy()
     df["change"] = df["close"] - df["close"].shift(1)
@@ -161,14 +161,15 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
 
 symbol = "GBPUSD"
 backtest_timeframe = "TIMEFRAME_M5"
-candle_data = get_hist_data(symbol,backtest_timeframe,num_candles=99040,time_till=None)
+#69120 = 1 year
+candle_data = get_hist_data(symbol,backtest_timeframe,num_candles=11520,time_till=None)
 
 #add technical indicators
 candle_data["sma"] = SMA(candle_data)       
 candle_data["rsi"] = RSI(candle_data)
 candle_data['volatility'] = calculate_volatility(candle_data, 38, 2.4)
 #print(data['volatility'].tail(20))
-candle_data['sar'] = parabolic_sar(candle_data, step=0.01, max_step=0.2)
+candle_data['sar'] = parabolic_sar(candle_data, step=0.007, max_step=0.2)
 candle_data.dropna(inplace=True)
 
 signal = None
@@ -185,17 +186,18 @@ returns_index = candle_data.columns.to_list().index("returns")
 for i in range(3,len(candle_data)-1):
     if signal == None:
         if (#candle_data.iloc[i,cp_index] > candle_data.iloc[i,sma_index] and \
-        candle_data.iloc[i,rsi_index] > 10 and \
-        candle_data.iloc[i-1,rsi_index] > 10 and \
-        candle_data.iloc[i-2,rsi_index] < 10): #and \
+        candle_data.iloc[i,rsi_index] > 20 and \
+        candle_data.iloc[i-1,rsi_index] < 20 #and \
+        #candle_data.iloc[i-2,rsi_index] < 10
+        ): #and \
         #candle_data.iloc[i-3,rsi_index] < 10):
         #    candle_data.iloc[i,rsi_index] >  candle_data.iloc[i-1,rsi_index] and \
         #    candle_data.iloc[i-1,rsi_index] < candle_data.iloc[i-2,rsi_index] and \
         #    candle_data.iloc[i-2,rsi_index] < candle_data.iloc[i-3,rsi_index] and \
         
                 atr = candle_data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                sl_pips = 1.1 * atr  # 1.5x ATR
-                tp_pips = 2.2 * atr  # 3x ATR (2:1 reward:risk)
+                sl_pips = 2.0 * atr  # 1.5x ATR
+                tp_pips = 5.0 * atr  # 3x ATR (2:1 reward:risk)
                 signal = 'long'
                 trade_stats.append({"time":candle_data.index[i],
                                     "entry_bar": i,
@@ -209,17 +211,18 @@ for i in range(3,len(candle_data)-1):
                                     })
     
         elif (#candle_data.iloc[i,cp_index] < candle_data.iloc[i,sma_index] and \
-                candle_data.iloc[i,rsi_index] < 90 and \
-                candle_data.iloc[i-1,rsi_index] < 90 and \
-                candle_data.iloc[i-2,rsi_index] > 90): #and \
+                candle_data.iloc[i,rsi_index] < 80 and \
+                candle_data.iloc[i-1,rsi_index] > 80 #and \
+                #candle_data.iloc[i-2,rsi_index] > 90
+                ): #and \
                 #candle_data.iloc[i-3,rsi_index] > 90):
             # candle_data.iloc[i,rsi_index] > candle_data.iloc[i-1,rsi_index] and \
             # candle_data.iloc[i-1,rsi_index] > candle_data.iloc[i-2,rsi_index] and \
             # candle_data.iloc[i-2,rsi_index] > candle_data.iloc[i-3,rsi_index] and \
             # candle_data.iloc[i-3,rsi_index] > 40:
                 atr = candle_data.iloc[i]['volatility'] / get_pip(symbol)
-                sl_pips = 1.1 * atr  # 1.5x ATR
-                tp_pips = 2.2 * atr  # 3x ATR (2:1 reward:risk)
+                sl_pips = 2.0 * atr  # 1.5x ATR
+                tp_pips = 5.0 * atr  # 3x ATR (2:1 reward:risk)
                 signal = 'short'
                 trade_stats.append({"time":candle_data.index[i],
                                     "entry_bar": i,
@@ -233,7 +236,7 @@ for i in range(3,len(candle_data)-1):
                         
     elif signal == "long":
         current_sar = candle_data.iloc[i]['sar']
-        max_hold_bars = 96*3#12 * 6  # 4 hours for M15
+        max_hold_bars = 96*3*2#12 * 6  # 4 hours for M15
         #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
         if candle_data.iloc[i,hi_index] > trade_stats[-1]["tp_price"]: 
             signal = None
@@ -243,10 +246,10 @@ for i in range(3,len(candle_data)-1):
             signal = None
             trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
             candle_data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
-        elif candle_data.iloc[i,rsi_index] > 90: 
-            signal = None
-            trade_stats[-1]["close_price"] =   candle_data.iloc[i+1,op_index]
-            candle_data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
+        # elif candle_data.iloc[i,rsi_index] > 90: 
+        #     signal = None
+        #     trade_stats[-1]["close_price"] =   candle_data.iloc[i+1,op_index]
+        #     candle_data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
         elif current_sar > trade_stats[-1]["sl_price"]:
             trade_stats[-1]["sl_price"] = current_sar
         # elif candle_data.iloc[i,hi_index] > (trade_stats[-1]["open_price"] + 45*get_pip(symbol)):
@@ -259,7 +262,7 @@ for i in range(3,len(candle_data)-1):
             
     elif signal == "short":
         current_sar = candle_data.iloc[i]['sar']
-        max_hold_bars = 96*3#12 * 6  # 4 hours for M15
+        max_hold_bars = 96*3*2#12 * 6  # 4 hours for M15
             
         if candle_data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
             signal = None
@@ -271,11 +274,11 @@ for i in range(3,len(candle_data)-1):
             candle_data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
         # elif candle_data.iloc[i,lo_index] < (trade_stats[-1]["open_price"] - 45*get_pip(symbol)):
         #     trade_stats[-1]["sl_price"] = trade_stats[-1]["open_price"]
-        elif candle_data.iloc[i,rsi_index] < 10: 
-            signal = None
-            trade_stats[-1]["close_price"] =   candle_data.iloc[i+1,op_index]
-            candle_data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
-        elif current_sar > trade_stats[-1]["sl_price"]:
+        # elif candle_data.iloc[i,rsi_index] < 10: 
+        #     signal = None
+        #     trade_stats[-1]["close_price"] =   candle_data.iloc[i+1,op_index]
+        #     candle_data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
+        elif current_sar < trade_stats[-1]["sl_price"]:
             trade_stats[-1]["sl_price"] = current_sar
         elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
