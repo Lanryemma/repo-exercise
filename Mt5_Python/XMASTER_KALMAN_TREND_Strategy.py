@@ -274,12 +274,12 @@ def get_pip_value1(symbol, lot_size=100000):
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
         raise ValueError(f"Symbol {symbol} not found")
-    
+    contract_size = symbol_info.trade_contract_size  # Critical for non-forex
     point = symbol_info.point
-    pip_size = 10 * point
+    pip_size = symbol_info.pip_size if hasattr(symbol_info, 'pip_size') else 10 * point#10 * point
     quote_currency = symbol[3:]
     
-    pip_value_quote = pip_size * lot_size
+    pip_value_quote = pip_size * contract_size #lot_size
     
     if quote_currency == "USD":
         return pip_value_quote
@@ -422,10 +422,10 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
     symbol = "EURUSD"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 23040 #3840
+    num_candles = 1920 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
-    RISK_PER_TRADE = 6  # $10 risk per trade
+    RISK_PER_TRADE = 10  # $10 risk per trade
     
     COMMISSION = 0.1     # $0 if no commission
 

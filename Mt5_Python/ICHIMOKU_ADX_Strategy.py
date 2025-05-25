@@ -81,26 +81,74 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
-def SMA(DF, n=200):
-    df = DF.copy()
-    df["sma"] = df["close"].rolling(n).mean()
-    return df["sma"]
+def calculate_donchian(data, period):
+    """Calculate Donchian Channel midpoint"""
+    return (
+        data['high'].rolling(period).max() + 
+        data['low'].rolling(period).min()
+    ) / 2
 
-def RMA(series, period):
-    #  Calculate the Relative Moving Average (RMA) using Pandas.
-    return series.ewm(alpha=1/period, adjust=False).mean()
-
-def RSI(DF, n=10):
-    "function to calculate RSI"
+def ichimoku_signals(DF, conversion_period=20, base_period=60):
+    """Calculate Ichimoku components and generate trading signals"""
     df = DF.copy()
-    df["change"] = df["close"] - df["close"].shift(1)
-    df["gain"] = np.where(df["change"]>=0, df["change"], 0)
-    df["loss"] = np.where(df["change"]<0, -1*df["change"], 0)
-    df["avgGain"] = RMA(df["gain"],n)
-    df["avgLoss"] = RMA(df["loss"],n)
-    df["rs"] = df["avgGain"]/df["avgLoss"]
-    df["rsi"] = 100 - (100/ (1 + df["rs"]))
-    return df["rsi"]
+    
+    # Calculate components
+    df['Conversion'] = calculate_donchian(df, conversion_period)
+    df['Base'] = calculate_donchian(df, base_period)
+    
+    # Generate signals (1 = buy, -1 = sell)
+    df['signal1'] = np.where(
+        df['Conversion'] > df['Base'], 1, -1
+    )
+    
+    return df
+
+# ======================
+# INDICATOR CALCULATION
+# ======================
+def calculate_adx_histogram(df, period=14):
+    """
+    Calculate ADX with colored histogram signals
+    Returns DataFrame with '+DI', '-DI', 'ADX', and 'Signal' columns
+    """
+    data = df.copy()
+    
+    # Calculate True Range
+    prev_close = data['close'].shift(1)
+    data['TR'] = np.maximum.reduce([
+        data['high'] - data['low'],
+        abs(data['high'] - prev_close),
+        abs(data['low'] - prev_close)
+    ])
+    
+    # Calculate Directional Movements
+    up_move = data['high'] - data['high'].shift(1)
+    down_move = data['low'].shift(1) - data['low']
+    data['+DM'] = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+    data['-DM'] = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+    
+    # Smooth values using Wilder's method
+    data['TR_smooth'] = data['TR'].rolling(period).sum()
+    data['+DM_smooth'] = data['+DM'].rolling(period).sum()
+    data['-DM_smooth'] = data['-DM'].rolling(period).sum()
+    
+    # Calculate DI values
+    data['+DI'] = (data['+DM_smooth'] / data['TR_smooth']) * 100
+    data['-DI'] = (data['-DM_smooth'] / data['TR_smooth']) * 100
+    
+    # Calculate ADX
+    dx = (abs(data['+DI'] - data['-DI']) / (data['+DI'] + data['-DI'])) * 100
+    data['ADX'] = dx.rolling(period).mean()
+    
+    # Generate signals (1 = buy, -1 = sell)
+    data['signal2'] = 0
+    buy_condition = (data['ADX'] > data['-DI']) & (data['+DI'] > data['-DI']) & (data['ADX'] > data['ADX'].shift(1))
+    sell_condition = (data['ADX'] > data['+DI']) & (data['-DI'] > data['+DI']) & (data['ADX'] > data['ADX'].shift(1))
+    
+    data.loc[buy_condition, 'signal2'] = 1
+    data.loc[sell_condition, 'signal2'] = -1
+    
+    return data[['+DI', '-DI', 'ADX', 'signal2']]
 
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
@@ -330,9 +378,9 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
-    timeframe = "TIMEFRAME_M5"
-    num_candles = 1440 #3840
+    symbol = "GBPJPY"
+    timeframe = "TIMEFRAME_M15"
+    num_candles = 3840 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 10  # $10 risk per trade
@@ -342,12 +390,23 @@ if __name__ == "__main__":
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
-    data["sma"] = SMA(data)       
-    data["rsi"] = RSI(data)
+    result1 = ichimoku_signals(data, conversion_period=20, base_period=60)
+    #15min conversion_period=20, base_period=60
+    #30min conversion_period=25, base_period=75
+    #1hr conversion_period=33, base_period=99
+    
+    result2 = calculate_adx_histogram(data, period=24)
+    #15min period=20
+    #30min period=15
+    #1hr period=14
+    
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.007, max_step=0.2)
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
     data.dropna(inplace=True)
+    
+    data[['+DI', '-DI', 'ADX', 'signal2']] = result2[['+DI', '-DI', 'ADX', 'signal2']]
+    data['signal1'] = result1['signal1']
 
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -371,7 +430,6 @@ if __name__ == "__main__":
     cp_index = data.columns.to_list().index("close")
     hi_index = data.columns.to_list().index("high")
     lo_index = data.columns.to_list().index("low")
-    rsi_index = data.columns.to_list().index("rsi")
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
@@ -394,8 +452,7 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i,rsi_index] > 20) & \
-                (data.iloc[i-1,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1)  #| data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
@@ -434,8 +491,7 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i,rsi_index] < 80) & \
-                (data.iloc[i-1,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
+            if ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
@@ -474,7 +530,7 @@ if __name__ == "__main__":
         
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96*3 #12 * 6  # 4 hours for M15
+            max_hold_bars = 96 #12 * 6  # 4 hours for M15
             
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
@@ -499,7 +555,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96*3#12 * 6  # 4 hours for M15
+            max_hold_bars = 96#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None
