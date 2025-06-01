@@ -81,27 +81,43 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 def get_pip(symbol):
     return 10*mt5.symbol_info(symbol).point  
 
-def SMA(DF, n=200):
-    df = DF.copy()
-    df["sma"] = df["close"].rolling(n).mean()
-    return df["sma"]
 
-def RMA(series, period):
-    #  Calculate the Relative Moving Average (RMA) using Pandas.
-    return series.ewm(alpha=1/period, adjust=False).mean()
 
-def RSI(DF, n=9):
-    "function to calculate RSI"
-    df = DF.copy()
-    df["change"] = df["close"] - df["close"].shift(1)
-    df["gain"] = np.where(df["change"]>=0, df["change"], 0)
-    df["loss"] = np.where(df["change"]<0, -1*df["change"], 0)
-    df["avgGain"] = RMA(df["gain"],n)
-    df["avgLoss"] = RMA(df["loss"],n)
-    df["rs"] = df["avgGain"]/df["avgLoss"]
-    df["rsi"] = 100 - (100/ (1 + df["rs"]))
-    return df["rsi"]
-
+def stochastic_macd(df, periods=45, fast_ema=12, slow_ema=26, signal_length=9):
+    """
+    Calculate Stochastic MACD indicator
+    Returns DataFrame with columns:
+    - stochastic_macd: Main oscillator line
+    - signal_line: Smoothed oscillator
+    - signal: Trading signals (1 = buy, -1 = sell)
+    """
+    df = df.copy()
+    
+    # Calculate EMAs
+    df['fast_ema'] = df['close'].ewm(span=fast_ema, adjust=False).mean()
+    df['slow_ema'] = df['close'].ewm(span=slow_ema, adjust=False).mean()
+    
+    # Calculate highest high/lowest low
+    df['highest_high'] = df['high'].rolling(periods).max()
+    df['lowest_low'] = df['low'].rolling(periods).min()
+    
+    # Calculate stochastic values
+    denom = df['highest_high'] - df['lowest_low']
+    df['fast_stoch'] = (df['fast_ema'] - df['lowest_low']) / denom.replace(0, np.nan)
+    df['slow_stoch'] = (df['slow_ema'] - df['lowest_low']) / denom.replace(0, np.nan)
+    
+    # Calculate Stochastic MACD
+    df['stochastic_macd'] = (df['fast_stoch'] - df['slow_stoch']) * 100
+    df['signal_line'] = df['stochastic_macd'].ewm(span=signal_length, adjust=False).mean()
+    
+    # Generate signals
+    df['signal'] = 0
+    buy_condition = (df['stochastic_macd'] > df['signal_line']) 
+    sell_condition = (df['stochastic_macd'] < df['signal_line'])
+    df.loc[buy_condition, 'signal'] = 1
+    df.loc[sell_condition, 'signal'] = -1
+    
+    return df[['stochastic_macd', 'signal_line', 'signal']]
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -330,7 +346,7 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURJPY"
+    symbol = "GBPUSD"
     timeframe = "TIMEFRAME_M5"
     num_candles = 34560 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
@@ -342,11 +358,19 @@ if __name__ == "__main__":
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
-    data["sma"] = SMA(data)       
-    data["rsi"] = RSI(data)
+    result1 = stochastic_macd(data, periods=55, fast_ema=12, slow_ema=26, signal_length=12)
+    # Best parameters per timeframe (periods, fast_ema, slow_ema)
+    # PARAMETERS = {
+    #     '5M': (30, 8, 17, 7),
+    #     '15M': (40, 10, 21, 9),
+    #     '30M': (45, 12, 26, 9),
+    #     '1H': (60, 12, 26, 12)
+    # }
+    
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.007, max_step=0.2)
+    data['sar'] = parabolic_sar(data, step=0.002, max_step=0.2)
+    data[['stochastic_macd', 'signal_line', 'signal']] = result1[['stochastic_macd', 'signal_line', 'signal']]
     data.dropna(inplace=True)
 
     data = data.tz_convert('Africa/Lagos') 
@@ -371,7 +395,7 @@ if __name__ == "__main__":
     cp_index = data.columns.to_list().index("close")
     hi_index = data.columns.to_list().index("high")
     lo_index = data.columns.to_list().index("low")
-    rsi_index = data.columns.to_list().index("rsi")
+    #rsi_index = data.columns.to_list().index("rsi")
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
@@ -394,13 +418,13 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i,rsi_index] > 20) & \
-                (data.iloc[i-1,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['signal']==1) & (data.iloc[i]['stochastic_macd'] > -10) & (data.iloc[i-1]['stochastic_macd'] < -10)
+                #(data.iloc[i-1,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -434,12 +458,12 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i,rsi_index] < 80) & \
-                (data.iloc[i-1,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
+            if ((data.iloc[i]['signal']==-1) & (data.iloc[i]['stochastic_macd'] < 10) & (data.iloc[i-1]['stochastic_macd'] > 10)
+                #(data.iloc[i-1,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility

@@ -150,6 +150,29 @@ def calculate_adx_histogram(df, period=14):
     
     return data[['+DI', '-DI', 'ADX', 'signal2']]
 
+def calculate_xmaster_signals(DF, short_ema=10, long_ema=38):
+    df = DF.copy()
+    # Calculate EMAs
+    df['EMA_Short'] = df['close'].ewm(span=short_ema, adjust=False).mean()
+    df['EMA_Long'] = df['close'].ewm(span=long_ema, adjust=False).mean()
+    
+    # Calculate normalized difference
+    df['MA_Diff'] = df['EMA_Short'] - df['EMA_Long']
+    df['Min_Diff'] = df['MA_Diff'].expanding().min()
+    df['Max_Diff'] = df['MA_Diff'].expanding().max()
+    
+    # Handle division by zero
+    diff_range = df['Max_Diff'] - df['Min_Diff']
+    df['Normalized'] = 100 * (df['MA_Diff'] - df['Min_Diff']) / diff_range.replace(0, 1)
+    
+    # Generate signals
+    df['signal3'] = 0
+    #df.loc[(df['Normalized'] < 55) & (df['Normalized'] > 50), 'signal2'] = 1   # Green line
+    #df.loc[(df['Normalized'] < 50) & (df['Normalized'] > 45), 'signal2'] = -1   # Green line
+    df.loc[df['Normalized'] > 55, 'signal3'] = 1   # green line
+    df.loc[df['Normalized'] < 45, 'signal3'] = -1   # Red line
+    return df
+
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -375,12 +398,12 @@ def is_pre_weekly_close(timestamp):
 # Example usage
 if __name__ == "__main__":
     # Load your price data (example with random data)
-    #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
-    #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
-    #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "GBPJPY"
-    timeframe = "TIMEFRAME_M15"
-    num_candles = 3840 #3840
+    #THE STRATEGY IS NOT GOOD FOR USDCAD 
+    #THE STRATEGY IS NOT GOOD FOR EURJPY 
+    #THE STRATEGY IS NOT GOOD FOR GBPJPY 
+    symbol = "USDCHF"
+    timeframe = "TIMEFRAME_M5"
+    num_candles = 5760 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 10  # $10 risk per trade
@@ -395,10 +418,12 @@ if __name__ == "__main__":
     #30min conversion_period=25, base_period=75
     #1hr conversion_period=33, base_period=99
     
-    result2 = calculate_adx_histogram(data, period=24)
+    result2 = calculate_adx_histogram(data, period=60)
     #15min period=20
     #30min period=15
     #1hr period=14
+    
+    result4 = calculate_xmaster_signals(data, short_ema=10, long_ema=38) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
     
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
@@ -407,6 +432,7 @@ if __name__ == "__main__":
     
     data[['+DI', '-DI', 'ADX', 'signal2']] = result2[['+DI', '-DI', 'ADX', 'signal2']]
     data['signal1'] = result1['signal1']
+    data['signal3'] = result4['signal3']
 
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -434,6 +460,8 @@ if __name__ == "__main__":
     
     for i in range(len(data)-1):
         
+        spread_cost1 = 0
+        spread_cost2 = 0
         current_time = data.index[i]  # <-- This is where the timestamp comes from
             # ======== NEW CODE START ======== (COMMENT: Weekly close check)
         if is_pre_weekly_close(current_time) and signal is not None:
@@ -452,12 +480,12 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i]['signal1']==1)  &  (data.iloc[i]['signal2']==1)  #| data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal2']==1) &  (data.iloc[i]['signal1']==1)  #| data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -472,7 +500,7 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
-                    SPREAD_COST1 = pos_size*5    # $2 per round trip (adjust based on your broker)
+                    spread_cost1 = pos_size*5    # $2 per round trip (adjust based on your broker)
                     # Store risk management parameters
                     pip_value = get_pip_value1(symbol) * pos_size
                     signal = 'long'
@@ -488,14 +516,14 @@ if __name__ == "__main__":
                                         "risk_amount": RISK_PER_TRADE,
                                         "position_size": pos_size,
                                         "pip_value": pip_value,
-                                        "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
+                                        "fees_paid": spread_cost1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i]['signal1']==-1)  &  (data.iloc[i]['signal2']==-1)# | data.iloc[i]['Tokyo_active'])
+            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal2']==-1) &  (data.iloc[i]['signal1']==-1)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -509,10 +537,11 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
-                    SPREAD_COST2 = pos_size*5    # $2 per round trip (adjust based on your broker)
+                    spread_cost2 = pos_size*5    # $2 per round trip (adjust based on your broker)
                     # Store risk management parameters
                     pip_value = get_pip_value1(symbol) * pos_size
                     signal = 'short'
+                    
                     trade_stats.append({"time":data.index[i],
                                         "entry_bar": i,
                                         "dir":"short",
@@ -525,7 +554,7 @@ if __name__ == "__main__":
                                         "risk_amount": RISK_PER_TRADE,
                                         "position_size": pos_size,
                                         "pip_value": pip_value,
-                                        "fees_paid": SPREAD_COST2 + (COMMISSION * 2)})                 
+                                        "fees_paid": spread_cost2 + (COMMISSION * 2)})                 
                             
         
         elif signal == "long":
@@ -635,10 +664,11 @@ if __name__ == "__main__":
     print(f"Gross Loss: ${gross_loss:.2f}")
     print(f"Net Profit: ${net_profit:.2f}")
     print(f"Profit Factor: {gross_profit/max(gross_loss, 1):.2f}")
-    print(f"Commission & Spread Costs: ${len(trade_stats) * (((SPREAD_COST2 + SPREAD_COST1)/2) + COMMISSION*2):.2f}")
+    total_fees = sum(trade['fees_paid'] for trade in trade_stats)
+    print(f"Commission & Spread Costs: ${total_fees:.2f}")
     print("Number of trades taken:", len(trade_stats))
-    retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
-    print(retun)
+    # retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
+    # print(retun)
     # Modify your equity curve plotting:
     cumulative_pnl = [calculate_trade_pnl(trade) for trade in trade_stats if trade['close_price'] is not None]
     cumulative_series = pd.Series(cumulative_pnl).cumsum()

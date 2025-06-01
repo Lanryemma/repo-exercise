@@ -299,6 +299,7 @@ def get_pip_value1(symbol, lot_size=100000):
     conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
     return pip_value_quote * conversion_rate
 
+
 def get_pos_size2(symbol, risk_amount, stop_loss_pips):
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
@@ -318,6 +319,8 @@ def get_pos_size2(symbol, risk_amount, stop_loss_pips):
     position_size = min(position_size, symbol_info.volume_max)
     
     return position_size
+
+
 
 MARTINGALE_MULTIPLIER = 1.01  # <-- Change this value as needed
 MARTINGALE_TRADES = 20         # Number of trades in martingale sequence
@@ -420,9 +423,9 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
+    symbol = "GBPUSD"
     timeframe = "TIMEFRAME_M15"
-    num_candles = 1920 #3840
+    num_candles = 11520 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 10  # $10 risk per trade
@@ -457,7 +460,7 @@ if __name__ == "__main__":
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
     data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
-    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.2)
+    data['sar'] = parabolic_sar(data, step=0.01, max_step=0.2)
     # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -506,7 +509,8 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i]['signal3']==1)  &  (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==1) & (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
+            if ( (data.iloc[i]['signal1']==1) &  (data.iloc[i]['signal2']==-1) &\
+                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
@@ -545,7 +549,8 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i]['signal3']==-1)  &  (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==-1) & (data.iloc[i]['newyork_active'] | data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active'])
+            if ( (data.iloc[i]['signal1']==-1) &  (data.iloc[i]['signal2']==1) &\
+                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] | data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==-1) #& (data.iloc[i]['newyork_active'] | data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
@@ -689,7 +694,8 @@ if __name__ == "__main__":
     print(f"Gross Loss: ${gross_loss:.2f}")
     print(f"Net Profit: ${net_profit:.2f}")
     print(f"Profit Factor: {gross_profit/max(gross_loss, 1):.2f}")
-    print(f"Commission & Spread Costs: ${len(trade_stats) * (((SPREAD_COST2 + SPREAD_COST1)/2) + COMMISSION*2):.2f}")
+    total_fees = sum(trade['fees_paid'] for trade in trade_stats)
+    print(f"Commission & Spread Costs: ${total_fees:.2f}")
     print("Number of trades taken:", len(trade_stats))
     # retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
     # print(retun)
