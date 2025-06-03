@@ -818,7 +818,7 @@ if __name__ == "__main__":
                 
             
             # CHANGED LINE 2: Align sleep to wall-clock 15-minute marks
-            time.sleep(240 - (current_time % 240))  # Exact 15-minute alignment
+            time.sleep(600 - (current_time % 600))  # Exact 15-minute alignment
 
         except KeyboardInterrupt:
             print('\n\nKeyboard exception received. Exiting.')
