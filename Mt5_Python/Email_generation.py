@@ -26,7 +26,7 @@ def send_email(message, to_email_id="ololadeolayokun@gmail.com", app_password="h
     except Exception as e:
         print("Email failed:", e)
 """
-def send_email(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylpnnxzwd", to_email_id="ololadeolayokun@gmail.com"):
+def send_email(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylpnnxzwd", to_email_id="Writershub569@gmail.com"):
     try:
         # Create a MIME message
         context = ssl.create_default_context()
@@ -41,6 +41,22 @@ def send_email(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylp
     except Exception as e:
         print("Email failed:",e)
 
+
+def send_email2(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylpnnxzwd", to_email_id="ololadeolayokun@gmail.com"):
+    try:
+        # Create a MIME message
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as s:
+            #s.login("lanryemma@gmail.com", "hsuqgmnylpnnxzwd")  # No spaces!
+            #s.sendmail("lanryemma@gmail.com", "ololadeolayokun@gmail.com", "Subject: Test\n\nHello")
+            s.login(email_id,app_password)
+            email_subject="MT5 TradingBot_1 Notification"
+            email_body=message
+            s.sendmail(email_id,to_email_id, 'Subject: {}\n\n{}'.format(email_subject, email_body))
+            print("Email sent!")
+    except Exception as e:
+        print("Email failed:",e)
+"""
 # display data on the MetaTrader 5 package
 print("MetaTrader5 package author: ",mt5.__author__)
 print("MetaTrader5 package version: ",mt5.__version__)
@@ -65,7 +81,7 @@ if not mt5.initialize(path = path1, login= int(key[0]),password=key[1], server=k
 else:
     print("connection established")
     send_email("connection established")
-
+"""
 
 
 

@@ -423,7 +423,7 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "GBPUSD"
+    symbol = "GBPMXN"
     timeframe = "TIMEFRAME_M15"
     num_candles = 11520 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )

@@ -348,7 +348,7 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
     symbol = "GBPUSD"
     timeframe = "TIMEFRAME_M5"
-    num_candles = 34560 #3840
+    num_candles = 5760 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 10  # $10 risk per trade
