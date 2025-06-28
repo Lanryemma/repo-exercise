@@ -148,7 +148,7 @@ def calculate_adaptive_sl_tp(df, symbol, risk_reward_ratio=2):
     df['tp_pips'] = df['atr_pips'] * tp_mult
     return df
 
-def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
+def parabolic_sar1(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -193,6 +193,57 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
             df['sar'] = sar
         return df['sar']
         
+
+def parabolic_sar(df, step=0.02, max_step=0.2):
+    df = df.copy()
+    high = df['high'].values
+    low = df['low'].values
+    sar = np.full(len(df), np.nan)
+    trend = 1  # 1 = bullish, -1 = bearish
+    
+    # Correct initial EP: high[0] for bullish, low[0] for bearish
+    ep = high[0] if trend == 1 else low[0]
+    af = step
+    
+    # Initial SAR (first value)
+    sar[0] = low[0] if trend == 1 else high[0]
+    
+    for i in range(1, len(df)):
+        # Calculate interim SAR
+        sar[i] = sar[i-1] + af * (ep - sar[i-1])
+        
+        if trend == 1:
+            # Update EP FIRST (even if reversal happens)
+            if high[i] > ep:
+                ep = high[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if low[i] < sar[i]:
+                trend = -1
+                sar[i] = ep  # Set to prior bullish EP, not current high!
+                ep = low[i]  # New bearish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = min(sar[i], low[i-1], low[max(0, i-2)])
+        else:
+            # Update EP FIRST
+            if low[i] < ep:
+                ep = low[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if high[i] > sar[i]:
+                trend = 1
+                sar[i] = ep  # Set to prior bearish EP, not current low!
+                ep = high[i]  # New bullish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = max(sar[i], high[i-1], high[max(0, i-2)])
+        df['sar'] = sar
+    return df['sar'] #pd.Series(sar, index=df.index)
 
 # Add these near your other utility functions
 def get_pip_value1(symbol, lot_size=100000):
@@ -347,8 +398,8 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
     symbol = "GBPUSD"
-    timeframe = "TIMEFRAME_M5"
-    num_candles = 5760 #3840
+    timeframe = "TIMEFRAME_M15"
+    num_candles = 11520 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 10  # $10 risk per trade
@@ -358,7 +409,7 @@ if __name__ == "__main__":
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
-    result1 = stochastic_macd(data, periods=55, fast_ema=12, slow_ema=26, signal_length=12)
+    result1 = stochastic_macd(data, periods=30, fast_ema=8, slow_ema=17, signal_length=7)
     # Best parameters per timeframe (periods, fast_ema, slow_ema)
     # PARAMETERS = {
     #     '5M': (30, 8, 17, 7),
@@ -369,7 +420,7 @@ if __name__ == "__main__":
     
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.002, max_step=0.2)
+    data['sar'] = parabolic_sar(data, step=0.009, max_step=0.2)
     data[['stochastic_macd', 'signal_line', 'signal']] = result1[['stochastic_macd', 'signal_line', 'signal']]
     data.dropna(inplace=True)
 

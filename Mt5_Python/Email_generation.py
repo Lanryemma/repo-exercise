@@ -26,7 +26,7 @@ def send_email(message, to_email_id="ololadeolayokun@gmail.com", app_password="h
     except Exception as e:
         print("Email failed:", e)
 """
-def send_email(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylpnnxzwd", to_email_id="Writershub569@gmail.com"):
+def send_email2(message, email_id="lanryemma@gmail.com", app_password="yncpcqbiokoxuxoc", to_email_id="Writershub569@gmail.com"):
     try:
         # Create a MIME message
         context = ssl.create_default_context()
@@ -42,7 +42,7 @@ def send_email(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylp
         print("Email failed:",e)
 
 
-def send_email2(message, email_id="lanryemma@gmail.com", app_password="hsuqgmnylpnnxzwd", to_email_id="ololadeolayokun@gmail.com"):
+def send_email(message, email_id="lanryemma@gmail.com", app_password="yncpcqbiokoxuxoc", to_email_id="ololadeolayokun@gmail.com"):
     try:
         # Create a MIME message
         context = ssl.create_default_context()

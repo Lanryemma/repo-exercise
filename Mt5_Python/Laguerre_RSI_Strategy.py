@@ -6,7 +6,7 @@ import datetime as dt
 import pytz
 import matplotlib.pyplot as plot
 from pandas import Series
-from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
+#from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
 # display data on the MetaTrader 5 package
@@ -78,120 +78,91 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 
 # Calculate technical components
 
-def calculate_heikin_ashi(df):
-    ha = df.copy()
+def get_pip(symbol):
+    return 10*mt5.symbol_info(symbol).point  
+
+# Calculate Laguerre RSI
+def laguerre_rsi(data1, alpha=0.2):
+    """
+    Calculates Laguerre RSI indicator
+    :param data: Pandas Series of closing prices
+    :param alpha: Smoothing factor (0.2 by default)
+    :return: Pandas Series with Laguerre RSI values
+    """
+    data2 = data1.copy()
+    data = data2['close']
+    gamma = 1 - alpha
+    L0, L1, L2, L3 = [np.zeros(len(data)) for _ in range(4)]
     
-    # Initialize columns
-    ha['ha_close'] = (ha['open'] + ha['high'] + ha['low'] + ha['close']) / 4
-    ha['ha_open'] = (ha['open'].shift(1) + ha['close'].shift(1)) / 2
-    ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
-    ha['ha_low'] = ha[['low', 'ha_open', 'ha_close']].min(axis=1)
+    # Initialize first values
+    L0[0] = L1[0] = L2[0] = L3[0] = data.iloc[0]
     
-    ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
-    return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+    # Calculate Laguerre filters
+    for i in range(1, len(data)):
+        L0[i] = alpha * data.iloc[i] + gamma * L0[i-1]
+        L1[i] = -gamma * L0[i] + L0[i-1] + gamma * L1[i-1]
+        L2[i] = -gamma * L1[i] + L1[i-1] + gamma * L2[i-1]
+        L3[i] = -gamma * L2[i] + L2[i-1] + gamma * L3[i-1]
+    
+    # Calculate momentum components
+    cu = np.maximum(0, L0-L1) + np.maximum(0, L1-L2) + np.maximum(0, L2-L3)
+    cd = np.maximum(0, L1-L0) + np.maximum(0, L2-L1) + np.maximum(0, L3-L2)
+    
+    # Avoid division by zero
+    temp = np.where(cu + cd == 0, 1e-10, cu + cd)
+    data2['LG_RSI'] = 100 * (cu / temp)
+    return data2['LG_RSI']
 
 
-#  ---------------------------------------
-# Kalman Filter implementation======================================================================================
-def kalman_filter(series, length, R=0.01, Q=0.1):
-    estimates = np.zeros(len(series))
-    error_est = 1.0
+def laguerre_rsi1(data1, alpha = 0.2):
+    """
+    Correctly calculates Laguerre RSI indicator.
     
-    # Use .iloc for position-based access
-    estimates[0] = series.iloc[0]  # First element
+    :param data: Pandas Series of closing prices.
+    :param alpha: Smoothing factor (0.2 by default).
+    :return: Pandas Series with Laguerre RSI values.
+    """
+    data2 = data1.copy()
+    data = data2['close']
+    gamma = 1 - alpha
+    n = len(data)
     
-    for i in range(1, len(series)):
-        prediction = estimates[i-1]
-        
-        # Kalman gain calculation
-        error_meas = R * length
-        kalman_gain = error_est / (error_est + error_meas)
-        
-        # Use .iloc for position-based access
-        current_value = series.iloc[i]
-        estimates[i] = prediction + kalman_gain * (current_value - prediction)
-        
-        # Error estimate update
-        error_est = (1 - kalman_gain) * error_est + Q / length
+    # Initialize arrays with zeros (as in Pine Script)
+    L0 = np.zeros(n)
+    L1 = np.zeros(n)
+    L2 = np.zeros(n)
+    L3 = np.zeros(n)
     
-    return pd.Series(estimates, index=series.index)
-
-# Calculate signals
-def calculate_signals(DF, short_len=50, long_len=150):
-    df = DF.copy()
-    # Calculate Kalman filters
-    df['short_kalman'] = kalman_filter(df['close'], short_len)
-    df['long_kalman'] = kalman_filter(df['close'], long_len)
+    # First element calculations (match Pine Script's logic)
+    L0[0] = alpha * data.iloc[0]  # Not initial close! (1-gamma)*src + gamma*0
+    L1[0] = -gamma * L0[0]        # -gamma*L0 + 0 + gamma*0
+    L2[0] = -gamma * L1[0]        # -gamma*L1 + 0 + gamma*0
+    L3[0] = -gamma * L2[0]        # -gamma*L2 + 0 + gamma*0
     
-    # Generate trend signals
-    df['signal1'] = np.where(
-        df['short_kalman'] > df['long_kalman'], 
-        1,  # Up trend
-        -1  # Down trend
+    # Calculate filters for i >= 1
+    for i in range(1, n):
+        L0[i] = alpha * data.iloc[i] + gamma * L0[i-1]
+        L1[i] = -gamma * L0[i] + L0[i-1] + gamma * L1[i-1]
+        L2[i] = -gamma * L1[i] + L1[i-1] + gamma * L2[i-1]
+        L3[i] = -gamma * L2[i] + L2[i-1] + gamma * L3[i-1]
+    
+    # Calculate momentum components
+    cu = (
+        np.maximum(0, L0 - L1) + 
+        np.maximum(0, L1 - L2) + 
+        np.maximum(0, L2 - L3)
+    )
+    cd = (
+        np.maximum(0, L1 - L0) + 
+        np.maximum(0, L2 - L1) + 
+        np.maximum(0, L3 - L2)
     )
     
-    return df
+    # Avoid division by zero
+    temp = np.where(cu + cd == 0, 1e-10, cu + cd)
+    data2['LG_RSI'] = 100 * (cu / temp)
+    return data2['LG_RSI']  # Scaled 0-100 as in Pine Script
 
-# 3. Indicator Calculation
-def calculate_xmaster_signals(DF, short_ema=10, long_ema=38):
-    df = DF.copy()
-    # Calculate EMAs
-    df['EMA_Short'] = df['close'].ewm(span=short_ema, adjust=False).mean()
-    df['EMA_Long'] = df['close'].ewm(span=long_ema, adjust=False).mean()
-    
-    # Calculate normalized difference
-    df['MA_Diff'] = df['EMA_Short'] - df['EMA_Long']
-    df['Min_Diff'] = df['MA_Diff'].expanding().min()
-    df['Max_Diff'] = df['MA_Diff'].expanding().max()
-    
-    # Handle division by zero
-    diff_range = df['Max_Diff'] - df['Min_Diff']
-    df['Normalized'] = 100 * (df['MA_Diff'] - df['Min_Diff']) / diff_range.replace(0, 1)
-    
-    # Generate signals
-    df['signal2'] = 0
-    #df.loc[(df['Normalized'] < 55) & (df['Normalized'] > 50), 'signal2'] = 1   # Green line
-    #df.loc[(df['Normalized'] < 50) & (df['Normalized'] > 45), 'signal2'] = -1   # Green line
-    df.loc[df['Normalized'] > 50, 'signal2'] = 1   # green line
-    df.loc[df['Normalized'] < 50, 'signal2'] = -1   # Red line
-    return df
-
-# Calculate technical components
-def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
-    df = DF.copy()
-    # Calculate True Range
-    df['prev_close'] = df['close'].shift(1)
-    df['tr'] = np.maximum(
-        df['high'] - df['low'],
-        np.abs(df['high'] - df['prev_close']),
-        np.abs(df['low'] - df['prev_close'])
-    )
-    
-    # Calculate ATR
-    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
-    
-    # Calculate price mean (simplified EMA)
-    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
-    
-    return df.dropna()
-
-# Generate MDX signals
-def generate_mdx_signals(df):
-    # Calculate price deviation from mean
-    df['deviation'] = df['close'] - df['price_mean']
-    
-    # Calculate MDX values
-    df['mdx'] = np.where(
-        df['deviation'] > 0,
-        np.maximum(df['deviation'] - df['atr'], 0),
-        np.minimum(df['deviation'] + df['atr'], 0)
-    )
-    
-    # Generate signals (1 for buy, -1 for sell)
-    df['signal3'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
-    df['signal3'] = df['signal3'].replace(0, method='ffill')  # Carry forward signals
-    
-    return df
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -316,8 +287,10 @@ def parabolic_sar(df, step=0.02, max_step=0.2):
             else:
                 # Non-reversal adjustment
                 sar[i] = max(sar[i], high[i-1], high[max(0, i-2)])
-        df['sar'] = sar
-    return df['sar'] #pd.Series(sar, index=df.index)
+
+    return pd.Series(sar, index=df.index)
+
+
 
 # Add these near your other utility functions
 def get_pip_value1(symbol, lot_size=100000):
@@ -349,7 +322,6 @@ def get_pip_value1(symbol, lot_size=100000):
     
     conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
     return pip_value_quote * conversion_rate
-
 
 def get_pos_size2(symbol, risk_amount, stop_loss_pips):
     symbol_info = mt5.symbol_info(symbol)
@@ -474,63 +446,31 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
+    symbol = "GBPUSD"
     timeframe = "TIMEFRAME_M15"
     num_candles = 11520 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
-    RISK_PER_TRADE = 5  # $10 risk per trade
-    base_risk = 5  # Starting risk amount
-    current_risk = base_risk
-    consecutive_losses = 0
-    max_consecutive_losses = 5
-    COMMISSION = 0.1     # $0 if no commission
+    RISK_PER_TRADE = 2  # $10 risk per trade
     
+    COMMISSION = 0.1     # $0 if no commission
 
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
-    data = data.dropna().copy()
-    
-    # Calculate indicator
-        # Scalping (M1-M15)
-    # 'M1':   {'short_len': 180,  'long_len': 540},   # 3hr/9hr
-    # 'M5':   {'short_len': 72,   'long_len': 216},   # 6hr/18hr
-    # 'M15':  {'short_len': 48,   'long_len': 144},   # 12hr/36hr
-    
-    # # Day Trading (M30-H4)
-    # 'M30':  {'short_len': 24,   'long_len': 72},    # 12hr/36hr
-    # 'H1':   {'short_len': 50,   'long_len': 150},   # Original (50hr/150hr)
-    # 'H4':   {'short_len': 18,   'long_len': 54},    # 3d/9d
-    
-    
-    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result3 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
-    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
-    
-    result1 = calculate_signals(data, short_len=48, long_len=144) 
-    result2 = calculate_xmaster_signals(data, short_ema=12, long_ema=48) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
-    result4 = generate_mdx_signals(result3)
-    data['volatility'] = calculate_volatility(data, 34, 2.4)
-        #print(data['volatility'].tail(20))
-    data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
-    atr_ratio = data['volatility'].iloc[-1] / data['volatility'].mean()
-    dynamic_step = max(0.01, min(0.025, 0.018 * atr_ratio))
+    data = data.dropna().copy()       
+    data['LG_RSI'] = laguerre_rsi(data, alpha=0.3)
+    data['LG_RSI2'] = laguerre_rsi(data, alpha=0.75)
+    data['volatility'] = calculate_volatility(data, 38, 2.4)
+    #print(data['volatility'].tail(20))
+    data['sar'] = parabolic_sar(data, step=0.015, max_step=0.2)
+    data.dropna(inplace=True)
 
-    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.25)
-    # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
     data['london_active'] = data.index.map(lambda x: is_session_active(x, "London"))
     data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
     data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
     data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
-    data['signal1'] = result1['signal1']
-    data['signal2'] = result2['signal2']
-    data['signal3'] = result4['signal3']
-    data["ema1"] = data["close"].ewm(span=3, adjust=False).mean() 
-    data["ema2"] = data["close"].ewm(span=15, adjust=False).mean() 
     def calculate_trade_pnl(trade):
         if trade['dir'] == 'long':
             pips = (trade['close_price'] - trade['open_price'])/get_pip(symbol)
@@ -547,6 +487,8 @@ if __name__ == "__main__":
     cp_index = data.columns.to_list().index("close")
     hi_index = data.columns.to_list().index("high")
     lo_index = data.columns.to_list().index("low")
+    rsi_index = data.columns.to_list().index("LG_RSI")
+    rsi2_index = data.columns.to_list().index("LG_RSI2")
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
@@ -567,40 +509,17 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
                 signal = None
         
-        if signal is None:
-            # Martingale risk adjustment
-            if trade_stats and trade_stats[-1]["close_price"] is not None:
-                last_trade = trade_stats[-1]
-                last_pnl = calculate_trade_pnl(last_trade)
-                
-                # Reset risk after win
-                if last_pnl > 0:
-                    consecutive_losses = 0
-                    current_risk = base_risk
-                # Increase risk after loss
-                else:
-                    consecutive_losses += 1
-                    if consecutive_losses <= max_consecutive_losses:
-                        current_risk = base_risk * (1 + consecutive_losses)
-                        #print(f"Martingale: Loss #{consecutive_losses}, new risk: ${current_risk}")
-                    else:
-                        current_risk = base_risk
-                        #print("Max consecutive losses reached, resetting to base risk")
-        
-        #RISK_PER_TRADE
-        risk = RISK_PER_TRADE#current_risk
-        
         if signal == None:
             
-            if ( (data.iloc[i]['signal1']==1) &(data.iloc[i]['signal2']==1) &(data.iloc[i]['signal3']==1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
-                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i,rsi_index] > 50) & \
+                (data.iloc[i-1,rsi2_index] > 80) & (data.iloc[i,rsi2_index] < 80) #& (data.iloc[i]['newyork_active'] | data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active'])
+                    #(data.iloc[i-2,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
-                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 0.5 * atr  # 1.5x ATR
+                    tp_pips = 1.5 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -610,7 +529,7 @@ if __name__ == "__main__":
                     #tp_pips = data.iloc[i]['tp_pips']
                     # Calculate position size based on risk
                     try:
-                        pos_size = get_pos_size2(symbol, risk, sl_pips)
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
@@ -633,14 +552,14 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i]['signal1']==-1) &(data.iloc[i]['signal2']==-1) &(data.iloc[i]['signal3']==-1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
-                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i,rsi_index] < 50) & \
+                (data.iloc[i-1,rsi2_index] < 20) & (data.iloc[i,rsi2_index] > 20) #& (data.iloc[i]['newyork_active'] | data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active'])
+                #(data.iloc[i-2,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
-                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 0.5 * atr  # 1.5x ATR
+                    tp_pips = 1.5 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -649,7 +568,7 @@ if __name__ == "__main__":
                     #sl_pips = data.iloc[i]['sl_pips']
                     #tp_pips = data.iloc[i]['tp_pips']
                     try:
-                        pos_size = get_pos_size2(symbol, risk, sl_pips)
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
@@ -674,7 +593,7 @@ if __name__ == "__main__":
         
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            max_hold_bars = 96*3 #12 * 6  # 4 hours for M15
             
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
@@ -699,7 +618,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            max_hold_bars = 96*3#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None

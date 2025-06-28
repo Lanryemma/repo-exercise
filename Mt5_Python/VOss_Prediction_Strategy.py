@@ -6,7 +6,7 @@ import datetime as dt
 import pytz
 import matplotlib.pyplot as plot
 from pandas import Series
-from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
+#from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
 # display data on the MetaTrader 5 package
@@ -78,120 +78,76 @@ def get_hist_data(symbol, timeframe,num_candles, time_till=None ):
 
 # Calculate technical components
 
-def calculate_heikin_ashi(df):
-    ha = df.copy()
-    
-    # Initialize columns
-    ha['ha_close'] = (ha['open'] + ha['high'] + ha['low'] + ha['close']) / 4
-    ha['ha_open'] = (ha['open'].shift(1) + ha['close'].shift(1)) / 2
-    ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
-    ha['ha_low'] = ha[['low', 'ha_open', 'ha_close']].min(axis=1)
-    
-    ha['color'] = np.where(ha['ha_close'] > ha['ha_open'], 'green', 'red')
-    return ha[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
+def get_pip(symbol):
+    return 10*mt5.symbol_info(symbol).point  
 
+# Optimized Bandpass Filter
+def bpf(series, period, bandwidth):
+    PIx2 = 4.0 * np.arcsin(1.0)
+    alpha = PIx2 / period
+    gamma = np.cos(alpha * bandwidth)
+    delta = 1.0 / gamma - np.sqrt(1.0 / np.power(gamma, 2) - 1.0)
+    
+    # Vectorized whitening
+    whitened = 0.5 * (series - series.shift(2).fillna(series.shift(1).fillna(series)))
+    
+    # Initialize with zeros
+    bandpass = np.zeros(len(series))
+    for i in range(2, len(series)):
+        bandpass[i] = (1.0 - delta) * whitened.iloc[i] + \
+                      np.cos(alpha) * (1.0 + delta) * bandpass[i-1] - \
+                      delta * bandpass[i-2]
+    return pd.Series(bandpass, index=series.index)
 
-#  ---------------------------------------
-# Kalman Filter implementation======================================================================================
-def kalman_filter(series, length, R=0.01, Q=0.1):
-    estimates = np.zeros(len(series))
-    error_est = 1.0
+# Fixed Voss Predictive Filter
+def vpf(series, prediction_bars):
+    order = min(9, int(3 * prediction_bars))  # Max order=9
+    voss = np.zeros(len(series))
     
-    # Use .iloc for position-based access
-    estimates[0] = series.iloc[0]  # First element
-    
-    for i in range(1, len(series)):
-        prediction = estimates[i-1]
-        
-        # Kalman gain calculation
-        error_meas = R * length
-        kalman_gain = error_est / (error_est + error_meas)
-        
-        # Use .iloc for position-based access
-        current_value = series.iloc[i]
-        estimates[i] = prediction + kalman_gain * (current_value - prediction)
-        
-        # Error estimate update
-        error_est = (1 - kalman_gain) * error_est + Q / length
-    
-    return pd.Series(estimates, index=series.index)
+    for i in range(order, len(series)):
+        E = 0
+        for j in range(order):
+            prev_index = i - order + j
+            E += voss[prev_index] * (j + 1) / order
+        voss[i] = 0.5 * (3 + order) * series.iloc[i] - E
+    return pd.Series(voss, index=series.index)
 
-# Calculate signals
-def calculate_signals(DF, short_len=50, long_len=150):
-    df = DF.copy()
-    # Calculate Kalman filters
-    df['short_kalman'] = kalman_filter(df['close'], short_len)
-    df['long_kalman'] = kalman_filter(df['close'], long_len)
+# Simplified trend strength
+def trend_strength(source, period=40):
+    """Returns 1 for strong uptrend, -1 for strong downtrend"""
+    # Create bar index series with matching index
+    bar_index = pd.Series(np.arange(len(source)), index=source.index)
     
-    # Generate trend signals
-    df['signal1'] = np.where(
-        df['short_kalman'] > df['long_kalman'], 
-        1,  # Up trend
-        -1  # Down trend
-    )
+    # Calculate rolling correlation
+    correlations = source.rolling(period).apply(
+        lambda x: x.corr(bar_index.loc[x.index]), 
+        raw=False
+    ).fillna(0)
     
-    return df
+    return np.where(correlations > 0.25, 1, np.where(correlations < -0.25, -1, 0))
 
-# 3. Indicator Calculation
-def calculate_xmaster_signals(DF, short_ema=10, long_ema=38):
-    df = DF.copy()
-    # Calculate EMAs
-    df['EMA_Short'] = df['close'].ewm(span=short_ema, adjust=False).mean()
-    df['EMA_Long'] = df['close'].ewm(span=long_ema, adjust=False).mean()
+# Main processing function
+def generate_signals(df):
+    df = df.copy()
+    df['source'] = df['close']  # Using close prices as source
     
-    # Calculate normalized difference
-    df['MA_Diff'] = df['EMA_Short'] - df['EMA_Long']
-    df['Min_Diff'] = df['MA_Diff'].expanding().min()
-    df['Max_Diff'] = df['MA_Diff'].expanding().max()
+    # Calculate indicators
+    PERIOD = 30
+    BANDWIDTH = 0.25
+    PREDICTION_BARS = 3.0
     
-    # Handle division by zero
-    diff_range = df['Max_Diff'] - df['Min_Diff']
-    df['Normalized'] = 100 * (df['MA_Diff'] - df['Min_Diff']) / diff_range.replace(0, 1)
+    df['BPF'] = bpf(df['source'], PERIOD, BANDWIDTH)
+    df['VPF'] = vpf(df['BPF'], PREDICTION_BARS)
+    df['TrendStrength'] = trend_strength(df['source'], PERIOD)
     
     # Generate signals
-    df['signal2'] = 0
-    #df.loc[(df['Normalized'] < 55) & (df['Normalized'] > 50), 'signal2'] = 1   # Green line
-    #df.loc[(df['Normalized'] < 50) & (df['Normalized'] > 45), 'signal2'] = -1   # Green line
-    df.loc[df['Normalized'] > 50, 'signal2'] = 1   # green line
-    df.loc[df['Normalized'] < 50, 'signal2'] = -1   # Red line
-    return df
+    df['Signal1'] = np.where(df['BPF'] > 0, 1, -1)
+    df['Signal2'] = np.where(df['VPF'] > df['BPF'], 1, -1)
+    df['Signal3'] = df['TrendStrength']
+    
+    # Filter recent signals
+    return df[[ 'close', 'BPF', 'VPF', 'Signal1', 'Signal2', 'Signal3']]
 
-# Calculate technical components
-def calculate_components(DF, ema_period=26, atr_period=26, atr_multiplier=1.0):
-    df = DF.copy()
-    # Calculate True Range
-    df['prev_close'] = df['close'].shift(1)
-    df['tr'] = np.maximum(
-        df['high'] - df['low'],
-        np.abs(df['high'] - df['prev_close']),
-        np.abs(df['low'] - df['prev_close'])
-    )
-    
-    # Calculate ATR
-    df['atr'] = df['tr'].ewm(span=atr_period, adjust=False).mean() * atr_multiplier
-    
-    # Calculate price mean (simplified EMA)
-    df['price_mean'] = df['close'].ewm(span=ema_period, adjust=False).mean()
-    
-    return df.dropna()
-
-# Generate MDX signals
-def generate_mdx_signals(df):
-    # Calculate price deviation from mean
-    df['deviation'] = df['close'] - df['price_mean']
-    
-    # Calculate MDX values
-    df['mdx'] = np.where(
-        df['deviation'] > 0,
-        np.maximum(df['deviation'] - df['atr'], 0),
-        np.minimum(df['deviation'] + df['atr'], 0)
-    )
-    
-    # Generate signals (1 for buy, -1 for sell)
-    df['signal3'] = np.where(df['mdx'] > 0, 1, np.where(df['mdx'] < 0, -1, 0))
-    df['signal3'] = df['signal3'].replace(0, method='ffill')  # Carry forward signals
-    
-    return df
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -316,8 +272,10 @@ def parabolic_sar(df, step=0.02, max_step=0.2):
             else:
                 # Non-reversal adjustment
                 sar[i] = max(sar[i], high[i-1], high[max(0, i-2)])
-        df['sar'] = sar
-    return df['sar'] #pd.Series(sar, index=df.index)
+
+    return pd.Series(sar, index=df.index)
+
+
 
 # Add these near your other utility functions
 def get_pip_value1(symbol, lot_size=100000):
@@ -350,7 +308,6 @@ def get_pip_value1(symbol, lot_size=100000):
     conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
     return pip_value_quote * conversion_rate
 
-
 def get_pos_size2(symbol, risk_amount, stop_loss_pips):
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
@@ -370,8 +327,6 @@ def get_pos_size2(symbol, risk_amount, stop_loss_pips):
     position_size = min(position_size, symbol_info.volume_max)
     
     return position_size
-
-
 
 MARTINGALE_MULTIPLIER = 1.01  # <-- Change this value as needed
 MARTINGALE_TRADES = 20         # Number of trades in martingale sequence
@@ -474,63 +429,31 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
+    symbol = "EURJPY"
     timeframe = "TIMEFRAME_M15"
     num_candles = 11520 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
-    RISK_PER_TRADE = 5  # $10 risk per trade
-    base_risk = 5  # Starting risk amount
-    current_risk = base_risk
-    consecutive_losses = 0
-    max_consecutive_losses = 5
-    COMMISSION = 0.1     # $0 if no commission
+    RISK_PER_TRADE = 10  # $10 risk per trade
     
+    COMMISSION = 0.1     # $0 if no commission
 
     # ha_data = calculate_heikin_ashi(data)
     # data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]= ha_data[['ha_open', 'ha_close', 'color','ha_high','ha_low']]
     data = data.dropna().copy()
-    
-    # Calculate indicator
-        # Scalping (M1-M15)
-    # 'M1':   {'short_len': 180,  'long_len': 540},   # 3hr/9hr
-    # 'M5':   {'short_len': 72,   'long_len': 216},   # 6hr/18hr
-    # 'M15':  {'short_len': 48,   'long_len': 144},   # 12hr/36hr
-    
-    # # Day Trading (M30-H4)
-    # 'M30':  {'short_len': 24,   'long_len': 72},    # 12hr/36hr
-    # 'H1':   {'short_len': 50,   'long_len': 150},   # Original (50hr/150hr)
-    # 'H4':   {'short_len': 18,   'long_len': 54},    # 3d/9d
-    
-    
-    #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
-    #result3 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
-    #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
-    
-    result1 = calculate_signals(data, short_len=48, long_len=144) 
-    result2 = calculate_xmaster_signals(data, short_ema=12, long_ema=48) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
-    result4 = generate_mdx_signals(result3)
-    data['volatility'] = calculate_volatility(data, 34, 2.4)
-        #print(data['volatility'].tail(20))
-    data = calculate_adaptive_sl_tp(data, symbol, risk_reward_ratio=2)
-    atr_ratio = data['volatility'].iloc[-1] / data['volatility'].mean()
-    dynamic_step = max(0.01, min(0.025, 0.018 * atr_ratio))
+    result1 = generate_signals(data)
+    data[['close', 'BPF', 'VPF', 'Signal1', 'Signal2', 'Signal3']] = result1[['close', 'BPF', 'VPF', 'Signal1', 'Signal2', 'Signal3']]
+    data['volatility'] = calculate_volatility(data, 38, 2.4)
+    #print(data['volatility'].tail(20))
+    data['sar'] = parabolic_sar(data, step=0.009, max_step=0.2)
+    data.dropna(inplace=True)
 
-    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.25)
-    # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
     data['london_active'] = data.index.map(lambda x: is_session_active(x, "London"))
     data['newyork_active'] = data.index.map(lambda x: is_session_active(x, "New_York"))
     data['sydney_active'] = data.index.map(lambda x: is_session_active(x, "Sydney"))
     data['Tokyo_active'] = data.index.map(lambda x: is_session_active(x, "Tokyo"))
-    data['signal1'] = result1['signal1']
-    data['signal2'] = result2['signal2']
-    data['signal3'] = result4['signal3']
-    data["ema1"] = data["close"].ewm(span=3, adjust=False).mean() 
-    data["ema2"] = data["close"].ewm(span=15, adjust=False).mean() 
     def calculate_trade_pnl(trade):
         if trade['dir'] == 'long':
             pips = (trade['close_price'] - trade['open_price'])/get_pip(symbol)
@@ -567,39 +490,16 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
                 signal = None
         
-        if signal is None:
-            # Martingale risk adjustment
-            if trade_stats and trade_stats[-1]["close_price"] is not None:
-                last_trade = trade_stats[-1]
-                last_pnl = calculate_trade_pnl(last_trade)
-                
-                # Reset risk after win
-                if last_pnl > 0:
-                    consecutive_losses = 0
-                    current_risk = base_risk
-                # Increase risk after loss
-                else:
-                    consecutive_losses += 1
-                    if consecutive_losses <= max_consecutive_losses:
-                        current_risk = base_risk * (1 + consecutive_losses)
-                        #print(f"Martingale: Loss #{consecutive_losses}, new risk: ${current_risk}")
-                    else:
-                        current_risk = base_risk
-                        #print("Max consecutive losses reached, resetting to base risk")
-        
-        #RISK_PER_TRADE
-        risk = RISK_PER_TRADE#current_risk
-        
         if signal == None:
             
-            if ( (data.iloc[i]['signal1']==1) &(data.iloc[i]['signal2']==1) &(data.iloc[i]['signal3']==1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
-                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['Signal1']==-1) & (data.iloc[i-1]['Signal2'] ==-1) &\
+                (data.iloc[i]['Signal2']==1) & (data.iloc[i]['Signal3']==1)
+                # | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -610,7 +510,7 @@ if __name__ == "__main__":
                     #tp_pips = data.iloc[i]['tp_pips']
                     # Calculate position size based on risk
                     try:
-                        pos_size = get_pos_size2(symbol, risk, sl_pips)
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
@@ -633,13 +533,13 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i]['signal1']==-1) &(data.iloc[i]['signal2']==-1) &(data.iloc[i]['signal3']==-1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
-                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i]['Signal1']==1) & (data.iloc[i-1]['Signal2'] ==1) &\
+                (data.iloc[i]['Signal2']==-1) & (data.iloc[i]['Signal3']==-1)
+                #(data.iloc[i-2,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
+                    sl_pips = 1.5 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -649,7 +549,7 @@ if __name__ == "__main__":
                     #sl_pips = data.iloc[i]['sl_pips']
                     #tp_pips = data.iloc[i]['tp_pips']
                     try:
-                        pos_size = get_pos_size2(symbol, risk, sl_pips)
+                        pos_size = get_pos_size2(symbol, RISK_PER_TRADE, sl_pips)
                     except Exception as e:
                         print(f"Position sizing error: {e}")
                         continue
@@ -674,7 +574,7 @@ if __name__ == "__main__":
         
         elif signal == "long":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            max_hold_bars = 96*3 #12 * 6  # 4 hours for M15
             
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
@@ -699,7 +599,7 @@ if __name__ == "__main__":
                 
         elif signal == "short":
             current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            max_hold_bars = 96*3#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None

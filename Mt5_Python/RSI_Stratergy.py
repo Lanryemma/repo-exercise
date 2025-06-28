@@ -108,7 +108,7 @@ def calculate_volatility(DF, length, mult):
             # Calculate volatility bands
             return df['atr'] * mult
 
-def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
+def parabolic_sar1(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -154,14 +154,65 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         return df['sar']
         
 
+def parabolic_sar(df, step=0.02, max_step=0.2):
+    df = df.copy()
+    high = df['high'].values
+    low = df['low'].values
+    sar = np.full(len(df), np.nan)
+    trend = 1  # 1 = bullish, -1 = bearish
+    
+    # Correct initial EP: high[0] for bullish, low[0] for bearish
+    ep = high[0] if trend == 1 else low[0]
+    af = step
+    
+    # Initial SAR (first value)
+    sar[0] = low[0] if trend == 1 else high[0]
+    
+    for i in range(1, len(df)):
+        # Calculate interim SAR
+        sar[i] = sar[i-1] + af * (ep - sar[i-1])
+        
+        if trend == 1:
+            # Update EP FIRST (even if reversal happens)
+            if high[i] > ep:
+                ep = high[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if low[i] < sar[i]:
+                trend = -1
+                sar[i] = ep  # Set to prior bullish EP, not current high!
+                ep = low[i]  # New bearish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = min(sar[i], low[i-1], low[max(0, i-2)])
+        else:
+            # Update EP FIRST
+            if low[i] < ep:
+                ep = low[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if high[i] > sar[i]:
+                trend = 1
+                sar[i] = ep  # Set to prior bearish EP, not current low!
+                ep = high[i]  # New bullish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = max(sar[i], high[i-1], high[max(0, i-2)])
+
+    return pd.Series(sar, index=df.index)
+
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
 symbol = "GBPMXN"
-backtest_timeframe = "TIMEFRAME_M15"
-candle_data = get_hist_data(symbol,backtest_timeframe,num_candles=36000,time_till=None)
+backtest_timeframe = "TIMEFRAME_M5"
+candle_data = get_hist_data(symbol,backtest_timeframe,num_candles=69120,time_till=None)
 
 #add technical indicators
 candle_data["sma"] = SMA(candle_data)       
@@ -263,7 +314,7 @@ for i in range(3,len(candle_data)-1):
             candle_data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
         # elif candle_data.iloc[i,lo_index] < (trade_stats[-1]["open_price"] - 45*get_pip(symbol)):
         #     trade_stats[-1]["sl_price"] = trade_stats[-1]["open_price"]
-        elif current_sar > trade_stats[-1]["sl_price"]:
+        elif current_sar < trade_stats[-1]["sl_price"]:
             trade_stats[-1]["sl_price"] = current_sar
     # if symbol == "USDSEK": 
     #     candle_data.iloc[i,-1] = candle_data.iloc[i,-1]/5 #adjust for pos size of USDSEK            

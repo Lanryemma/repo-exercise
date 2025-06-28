@@ -159,6 +159,7 @@ def close_position(symbol,ticket=None):
     return mt5.Close(symbol,ticket=ticket)
 
 def get_position_df():
+    
     positions = mt5.positions_get()
     if len(positions) > 0:
         pos_df = pd.DataFrame(list(positions),columns=positions[0]._asdict().keys())
@@ -221,7 +222,7 @@ def check_pnl_threshold():
 
 
 def main(symbol):
-    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe5M"].to_list()[0]
     
     try:
         # Single data fetch at beginning
@@ -266,8 +267,13 @@ def main(symbol):
                 # SAR Trailing Stop Update
                 ticket = open_pos_cur.iloc[0].ticket
                 current_sl = open_pos_cur.iloc[0].sl
-                if (position_type == "long" and current_sar > current_sl) or \
-                    (position_type == "short" and current_sar < current_sl):
+                if position_type == "long":
+                    current_price = mt5.symbol_info_tick(symbol).bid
+                else:  # short
+                    current_price = mt5.symbol_info_tick(symbol).ask
+                
+                if (position_type == "long" and current_sar > current_sl and current_sar < current_price) or \
+                    (position_type == "short" and current_sar < current_sl and current_sar > current_price):
                     new_sl = current_sar
                     request = {
                         "action": mt5.TRADE_ACTION_SLTP,
@@ -401,7 +407,7 @@ if __name__ == "__main__":
             
             for symbol in symbols:
                 pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
-                tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+                tf = params.loc[params.Symbol==symbol,"backtest_timeframe5M"].to_list()[0]
                 
                 # CHANGED LINE: Use current_time instead of time.time() in calculations
                 elapsed_since_start = current_time - starttime  
@@ -432,7 +438,7 @@ if __name__ == "__main__":
                 break
                 
             # CHANGED LINE 2: Align sleep to wall-clock 15-minute marks
-            time.sleep(900 - (current_time % 900))  # Exact 15-minute alignment
+            time.sleep(240 - (current_time % 240))  # Exact 15-minute alignment
 
         except KeyboardInterrupt:
             print('\n\nKeyboard exception received. Exiting.')

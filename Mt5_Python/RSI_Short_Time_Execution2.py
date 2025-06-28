@@ -6,9 +6,10 @@ import datetime as dt
 import pytz
 from pandas import Series
 import time
-from Email_generation import send_email
+from Email_generation import send_email, send_email2
+
 #from Get_position_size import get_pos_size
-from market_structure_breakout import parabolic_sar,calculate_volatility, MACD, calculate_heikin_ashi,calculate_atr_trailing, generate_signals,calculate_zigzag, detect_msb
+#from market_structure_breakout import parabolic_sar,calculate_volatility, MACD, calculate_heikin_ashi,calculate_atr_trailing, generate_signals,calculate_zigzag, detect_msb
 import os
 from openpyxl import Workbook
 
@@ -49,7 +50,7 @@ tz = pytz.timezone("Europe/Kyiv")   # Your existing timezone definition
 #______________________________________________________________________________________________________________________________________________________________
 #TECHNICAL INDICATOR WE ARE GOING TO GET DATAs FOR THE STRATEGY BACK-TESTING
 
-params = pd.read_csv("C:\\Users\\user\\Downloads\\params.csv")
+params = pd.read_csv("C:\\Users\\user\\Documents\\LANRE\\Desktop\\VPS_Execute\\params_2.csv")
 symbols = params.Symbol.to_list()
 print(params)
 
@@ -72,7 +73,21 @@ def get_hist_data_numeric_index(symbol, timeframe, start_pos=0, num_candles=200)
     hist_data_df.set_index("time", inplace=True)
     return hist_data_df
 
-
+# Modify get_hist_data_numeric_index:
+def get_hist_data_numeric_index2(symbol, timeframe, start_pos=0, num_candles=200):
+    # Define column names EXPLICITLY
+    columns = ['time', 'open', 'high', 'low', 'close', 'tick_volume', 'spread', 'real_volume']
+    
+    hist_data = mt5.copy_rates_from_pos(symbol, getattr(mt5, timeframe), start_pos, num_candles)
+    # Handle empty data case
+    if hist_data is None or len(hist_data) == 0:
+        print(f"No data for {symbol} {timeframe}")
+        return pd.DataFrame(columns=columns).set_index('time')
+    
+    hist_data_df = pd.DataFrame(hist_data, columns=columns)
+    hist_data_df['time'] = pd.to_datetime(hist_data_df['time'], unit='s')
+    hist_data_df.set_index('time', inplace=True)
+    return hist_data_df
 
 #_____________________________________________________________________________________________________________________________________________________________________
 
@@ -192,38 +207,149 @@ def place_bracket_order(symbol,vol,buy_sell,sl_price,tp_price):
 def close_position(symbol,ticket=None):
     return mt5.Close(symbol,ticket=ticket)
 
-def get_position_df():
+def get_position_df1():
     positions = mt5.positions_get()
     if len(positions) > 0:
-        pos_df = pd.DataFrame(list(positions),columns=positions[0]._asdict().keys())
-        pos_df.time = pd.to_datetime(pos_df.time, unit="s").dt.tz_localize('UTC').dt.tz_convert(tz)
+        pos_df = pd.DataFrame(list(positions), columns=positions[0]._asdict().keys())
+        pos_df['time'] = pd.to_datetime(pos_df['time'], unit="s").dt.tz_localize('UTC').dt.tz_convert(tz)
         pos_df.drop(['time_update', 'time_msc', 'time_update_msc', 'external_id'], axis=1, inplace=True)
         pos_df.type = np.where(pos_df.type==0,1,-1)
     else:
         pos_df = pd.DataFrame()
-        
     return pos_df
 
+def get_position_df(tz):
+    positions = mt5.positions_get()
+    if positions:
+        pos_df = pd.DataFrame(list(positions), columns=positions[0]._asdict().keys())
+        # Localize to UTC first, then convert
+        pos_df['time'] = pd.to_datetime(pos_df['time'], unit="s").dt.tz_localize('UTC').dt.tz_convert(tz)
+        pos_df.drop(['time_update', 'time_msc', 'time_update_msc', 'external_id'], axis=1, inplace=True)
+        pos_df.type = np.where(pos_df.type == 0, 1, -1)
+        return pos_df
+    return pd.DataFrame()
+
 def get_pip(symbol):
-    return 10*mt5.symbol_info(symbol).point  
+    return 10*mt5.symbol_info(symbol).point 
+
+def SMA(DF, n=200):
+    df = DF.copy()
+    df["sma"] = df["close"].rolling(n).mean()
+    return df["sma"]
+
+def RMA(series, period):
+    #  Calculate the Relative Moving Average (RMA) using Pandas.
+    return series.ewm(alpha=1/period, adjust=False).mean()
+
+def RSI(DF, n=9):
+    "function to calculate RSI"
+    df = DF.copy()
+    df["change"] = df["close"] - df["close"].shift(1)
+    df["gain"] = np.where(df["change"]>=0, df["change"], 0)
+    df["loss"] = np.where(df["change"]<0, -1*df["change"], 0)
+    df["avgGain"] = RMA(df["gain"],n)
+    df["avgLoss"] = RMA(df["loss"],n)
+    df["rs"] = df["avgGain"]/df["avgLoss"]
+    df["rsi"] = 100 - (100/ (1 + df["rs"]))
+    return df["rsi"]
+
+def calculate_volatility(DF, length, mult):
+    df = DF.copy()
+    # Calculate True Range
+    df['tr1'] = df['high'] - df['low']
+    df['tr2'] = abs(df['high'] - df['close'].shift())
+    df['tr3'] = abs(df['low'] - df['close'].shift())
+    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
+            
+    # Calculate ATR
+    df['atr'] = df['tr'].ewm(span=length, adjust=False).mean()
+            
+    # Calculate volatility bands
+    return df['atr'] * mult
+        
+
+def parabolic_sar(df, step=0.02, max_step=0.2):
+    high = df['high'].values
+    low = df['low'].values
+    length = len(high)
+    
+    # Initialize arrays
+    sar = np.full(length, np.nan)
+    trend = np.full(length, 0)
+    ep = np.full(length, 0.0)
+    af = np.full(length, step)
+    
+    # PROPER INITIALIZATION (Wilder's method)
+    # Start by assuming potential uptrend
+    trend[0] = 1
+    sar[0] = low[0]
+    ep[0] = high[0]
+    
+    # Check if downtrend should start instead
+    if low[0] < low[1] if len(low) > 1 else low[0]:
+        trend[0] = -1
+        sar[0] = high[0]
+        ep[0] = low[0]
+    
+    for i in range(1, length):
+        # Handle reversal first
+        reversal = False
+        
+        if trend[i-1] == 1:  # Uptrend
+            if low[i] < sar[i-1]:
+                reversal = True
+                trend[i] = -1
+                sar[i] = ep[i-1]
+                ep[i] = low[i]
+                af[i] = step
+        else:  # Downtrend
+            if high[i] > sar[i-1]:
+                reversal = True
+                trend[i] = 1
+                sar[i] = ep[i-1]
+                ep[i] = high[i]
+                af[i] = step
+        
+        # Continue current trend
+        if not reversal:
+            trend[i] = trend[i-1]
+            ep[i] = max(high[i], ep[i-1]) if trend[i] == 1 else min(low[i], ep[i-1])
+            
+            # Update acceleration factor only when new EP
+            if (trend[i] == 1 and high[i] > ep[i-1]) or (trend[i] == -1 and low[i] < ep[i-1]):
+                af[i] = min(af[i-1] + step, max_step)
+            else:
+                af[i] = af[i-1]
+            
+            # Calculate SAR
+            sar[i] = sar[i-1] + af[i] * (ep[i-1] - sar[i-1])
+            
+            # Enforce price boundaries
+            if trend[i] == 1:
+                sar[i] = min(sar[i], low[i-1], low[i])
+            else:
+                sar[i] = max(sar[i], high[i-1], high[i])
+    
+    return pd.Series(sar, index=df.index)
+
 
 def is_session_active(timestamp, session):
-    """Check session status in Lagos time context"""
-    lagos_hour = timestamp.hour  # Timestamp must already be in Lagos time
+    """Check session status in Kyiv time context"""
+    kyiv_hour = timestamp.astimezone(pytz.timezone("Europe/Kyiv")).hour
     
-    # Session hours in LAGOS TIME (GMT+1)
+    # Session hours in KYIV TIME (GMT+3)
     session_hours = {
-        "London": (8, 17),    # 8AM-5PM Lagos
-        "New_York": (13, 22), # 1PM-10PM Lagos
-        "Sydney": (23, 8),    # 11PM-8AM Lagos
-        "Tokyo": (1, 10)      # 1AM-10AM Lagos
+        "London": (10, 19),    # 10AM-7PM Kyiv (8AM-5PM London)
+        "New_York": (15, 24),  # 3PM-12AM Kyiv (8AM-5PM NY)
+        "Sydney": (8, 17),     # 8AM-5PM Kyiv
+        "Tokyo": (9, 18)       # 9AM-6PM Kyiv
     }[session]
 
     start, end = session_hours
     if start <= end:
-        return start <= lagos_hour < end
+        return start <= kyiv_hour < end
     else:
-        return lagos_hour >= start or lagos_hour < end
+        return kyiv_hour >= start or kyiv_hour < end
 
 
 #______________________________________________________________________________________________________________________________________________________________
@@ -232,11 +358,9 @@ def is_session_active(timestamp, session):
 #THIS IS THE MAIN MARKET EXECUTION CODE
 def trade_signal(data,l_s):
     signal = ""
-    hstgrm_index = data.columns.to_list().index("histogram")
-    signal_index = data.columns.to_list().index("signal")
-    buy_signal_index = data.columns.to_list().index('buy_signal')
-    sell_signal_index = data.columns.to_list().index('sell_signal')
-    ha_color = data.columns.to_list().index("color")
+    rsi_index = data.columns.to_list().index("rsi")
+    sma_index = data.columns.to_list().index("sma")
+    
     
     if l_s == "":
         # Get session status for last completed candle
@@ -244,11 +368,11 @@ def trade_signal(data,l_s):
         lagos_time = candle_time.astimezone(pytz.timezone("Africa/Lagos"))
         session_active = (is_session_active(lagos_time, "London") 
                             or is_session_active(lagos_time, "New_York"))
-        if data.iloc[-2,hstgrm_index] > 0 and data.iloc[-3,hstgrm_index] > 0 and data.iloc[-2,buy_signal_index] == True  and\
-            data.iloc[-2,signal_index] == 1 and data.iloc[-2,ha_color] == 'green' and session_active: #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
+        if ((data.iloc[-2,rsi_index] > 50) &(data.iloc[-2,rsi_index] < 80)):#\
+                #(data.iloc[-3,rsi_index] < 20)): #and session_active: #-2 refers to the last completed candle because in all likelihood the last candle in ohlc dataframe would be an unfinished candle.
             signal = "Buy"
-        elif data.iloc[-2,hstgrm_index] < 0 and data.iloc[-3,hstgrm_index] < 0 and data.iloc[-2,sell_signal_index] == True  and\
-            data.iloc[-2,signal_index] == -1 and data.iloc[-2,ha_color] == 'red' and session_active:
+        elif ((data.iloc[-2,rsi_index] < 50) & (data.iloc[-2,rsi_index] > 20)):# \
+                #(data.iloc[-3,rsi_index] > 80)): #and session_active:
             signal = "Sell"
             
     # elif l_s == "long":
@@ -282,92 +406,66 @@ def get_pip_value1(symbol, lot_size=100000):
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
         raise ValueError(f"Symbol {symbol} not found")
-    
-    # Get basic price information
+    contract_size = symbol_info.trade_contract_size  # Critical for non-forex
     point = symbol_info.point
-    pip_size = 10 * point  # 1 pip = 10 points
-    quote_currency = symbol[3:]  # Last 3 letters = quote currency
+    pip_size = symbol_info.pip_size if hasattr(symbol_info, 'pip_size') else 10 * point#10 * point
+    quote_currency = symbol[3:]
     
-    # Calculate pip value in quote currency
-    pip_value_quote = pip_size * lot_size  # Value per standard lot
+    pip_value_quote = pip_size * contract_size #lot_size
     
     if quote_currency == "USD":
         return pip_value_quote
     
-    # Find conversion rate to USD
     conversion_symbol = f"{quote_currency}USD"
     conversion_symbol_info = mt5.symbol_info(conversion_symbol)
     
     if not conversion_symbol_info:
-        # Try inverse pair (e.g., USDJPY instead of JPYUSD)
         conversion_symbol = f"USD{quote_currency}"
         conversion_symbol_info = mt5.symbol_info(conversion_symbol)
         if not conversion_symbol_info:
             raise ValueError(f"Cannot find conversion pair for {quote_currency}")
         
         conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
-        return pip_value_quote / conversion_rate  # Convert via inverse pair
+        return pip_value_quote / conversion_rate
     
     conversion_rate = mt5.symbol_info_tick(conversion_symbol).ask
     return pip_value_quote * conversion_rate
 
 def get_pos_size2(symbol, risk_amount, stop_loss_pips):
-    """
-    Calculate position size based on risk parameters
-    :param symbol: Trading symbol (e.g., "EURUSD")
-    :param risk_amount: Maximum risk amount in USD (e.g., 10)
-    :param stop_loss_pips: Stop loss distance in pips (e.g., 80)
-    :return: Position size in lots
-    """
     symbol_info = mt5.symbol_info(symbol)
     if not symbol_info:
         raise ValueError(f"Symbol {symbol} not found")
     
-    # Calculate pip value in USD for 1 standard lot
     pip_value_per_lot = get_pip_value1(symbol)
-    
-    # Calculate risk per standard lot
     risk_per_lot = stop_loss_pips * pip_value_per_lot
     
-    # Handle potential division by zero
     if risk_per_lot <= 0:
-        raise ValueError("Invalid risk calculation - check stop loss parameters")
+        raise ValueError("Invalid risk calculation")
     
-    # Calculate raw position size
     raw_position_size = risk_amount / risk_per_lot
-    
-    # Round to broker's allowed lot steps
     volume_step = symbol_info.volume_step
     position_size = round(raw_position_size / volume_step) * volume_step
     
-    # Ensure position size stays within broker limits
     position_size = max(position_size, symbol_info.volume_min)
     position_size = min(position_size, symbol_info.volume_max)
     
     return position_size
 
-
 def main(symbol):
-    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+    hist_timeframe = params.loc[params.Symbol==symbol,"backtest_timeframe5M"].to_list()[0]
     
     try:
         # Single data fetch at beginning
         data1 = get_hist_data_numeric_index(symbol, hist_timeframe)
         
         # Calculate all indicators once
-        ha_data = calculate_heikin_ashi(data1)
-        data1[['ha_open', 'ha_close', 'color']] = ha_data[['ha_open', 'ha_close', 'color']]
-        data1[["macd","signalm","histogram"]] = MACD(data1)
-        data1['trailing_stop'] = calculate_atr_trailing(data1)
-        data1['ema1'] = data1['close'].ewm(span=1).mean()
-        data1['buy_signal'] = (data1['close'] > data1['trailing_stop']) & (data1['ema1'] > data1['trailing_stop'])
-        data1['sell_signal'] = (data1['close'] < data1['trailing_stop']) & (data1['ema1'] < data1['trailing_stop'])
-        data1['zigzag'] = calculate_zigzag(data1)
-        msb_lines = detect_msb(data1, data1['zigzag'])
-        data1 = generate_signals(data1, msb_lines)
+        #ha_data = calculate_heikin_ashi(data1)
+        #data1[['ha_open', 'ha_close', 'color']] = ha_data[['ha_open', 'ha_close', 'color']]
+        data1["sma"] = SMA(data1)       
+        data1["rsi"] = RSI(data1)
         data1['volatility'] = calculate_volatility(data1, 34, 2.4)
-        data1['sar'] = parabolic_sar(data1,step=0.04, max_step=0.3)
-        current_sar = data1.iloc[-1]['sar']
+        data1['sar'] = parabolic_sar(data1,step=0.009, max_step=0.2)
+        current_sar = data1.iloc[-2]['sar']
 
         open_pos = get_position_df()
         
@@ -391,26 +489,59 @@ def main(symbol):
                     print(f"Time-based exit triggered for {symbol}")
                     signal = "Close"
                 
-                # SAR Trailing Stop Update
+                # SAR Trailing Stop Update - FIXED VERSION
+                
                 ticket = open_pos_cur.iloc[0].ticket
+                # Verify position still exists
+                
                 current_sl = open_pos_cur.iloc[0].sl
+                    
+                # Get current price for validation
                 if position_type == "long":
                     current_price = mt5.symbol_info_tick(symbol).bid
                 else:  # short
                     current_price = mt5.symbol_info_tick(symbol).ask
-                if (position_type == "long" and current_sar > current_sl and current_sar < current_price) or \
-                    (position_type == "short" and current_sar < current_sl and current_sar > current_price):
-                    new_sl = current_sar
+                
+                # Validate new stop loss before updating
+                def position_exists(ticket):
+                    positions = mt5.positions_get(ticket=ticket)
+                    return positions is not None and len(positions) > 0
+
+                # if position_exists(ticket):
+                #     # Update SL
+                # else:
+                #     print(f"Position {ticket} does not exist")
+                
+                if (position_type == "long" and current_sar > current_sl and current_sar < current_price):
+                    new_sl1 = current_sar
                     request = {
                         "action": mt5.TRADE_ACTION_SLTP,
                         "symbol": symbol,
-                        "sl": new_sl,
+                        "sl": new_sl1,
                         "tp": open_pos_cur.iloc[0].tp,
                         "ticket": ticket
-                    }
-                    mt5.order_send(request)
-                    print(f"Updated SL to SAR value: {new_sl}")
-                    send_email(f"SAR Trailing Stop Update: {symbol} SL moved to {new_sl}")
+                     }
+                    result = mt5.order_send(request)
+                    if result.retcode == mt5.TRADE_RETCODE_DONE:
+                        print(f"(RSI_Short_Time_Execution)Updated SL to SAR value: {new_sl1}")
+                        send_email(f"(RSI_Short_Time_Execution)SAR Trailing Stop Update: {symbol} SL moved to {new_sl1}")
+                    else:
+                        print(f"(RSI_Short_Time_Execution)SL update for {symbol} failed: {result.comment}")           
+                elif (position_type == "short" and current_sar < current_sl and current_sar > current_price):
+                    new_sl2 = current_sar
+                    request = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "symbol": symbol,
+                        "sl": new_sl2,
+                        "tp": open_pos_cur.iloc[0].tp,
+                        "ticket": ticket
+                        }
+                    result = mt5.order_send(request)
+                    if result.retcode == mt5.TRADE_RETCODE_DONE:
+                        print(f"(RSI_Short_Time_Execution)Updated SL to SAR value: {new_sl2}")
+                        send_email(f"(RSI_Short_Time_Execution)SAR Trailing Stop Update: {symbol} SL moved to {new_sl2}")
+                    else:
+                        print(f"(RSI_Short_Time_Execution) SL update for {symbol} failed: {result.comment}")
 
         # Generate trading signal if no time-based exit
         if not signal:
@@ -423,21 +554,21 @@ def main(symbol):
             return
         
         # Calculate minimum stop distance in pips
-        stops_level = symbol_info.stops_level if hasattr(symbol_info, 'stops_level') else 15
-        point = symbol_info.point
-        min_stop_pips = (stops_level * point) / get_pip(symbol)  # Convert to pips
+        # stops_level = symbol_info.stops_level if hasattr(symbol_info, 'stops_level') else 15
+        # point = symbol_info.point
+        # min_stop_pips = (stops_level * point) / get_pip(symbol)  # Convert to pips
 
         # [Existing position management code...]
-
+        
         # Order execution logic with adjusted stop-loss
         if signal == "Buy":
             current_price = mt5.symbol_info_tick(symbol).ask
-            sl_pips = max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
+            sl_pips = (1.5 * atr.iloc[-2]) #max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
             Bsl_pips = current_price - sl_pips * get_pip(symbol)
-            Btp_pips = current_price + 3.0 * atr.iloc[-2] * get_pip(symbol)
+            Btp_pips = current_price + 4.0 * atr.iloc[-2] * get_pip(symbol)
             stop_loss_pips = (current_price - Bsl_pips)/get_pip(symbol)
-            pos_size = get_pos_size2(symbol, 10, stop_loss_pips)
-            place_bracket_order(symbol, pos_size, signal, Bsl_pips, Btp_pips)
+            pos_size = get_pos_size2(symbol, 25, stop_loss_pips)
+            result = place_bracket_order(symbol, pos_size, signal, Bsl_pips, Btp_pips)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 order = mt5.orders_get(ticket=result.order)[0]
                 weekly_trades.append({
@@ -454,19 +585,21 @@ def main(symbol):
                     'pnl': None,
                     'close_type': None
                 })
-            # ... (rest of buy logic)
-            print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
-            send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
-
-
+                # ... (rest of buy logic)
+                print("{}:(RSI_Short_Time_Execution) New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
+                send_email("{}:(RSI_Short_Time_Execution) New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
+            else:
+                print(f"Order failed for {symbol}")
+            
+        
         elif signal == "Sell":
             current_price = mt5.symbol_info_tick(symbol).bid
-            sl_pips = max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
+            sl_pips = (1.5 * atr.iloc[-2]) #max(1.5 * atr.iloc[-2], min_stop_pips)  # Ensure minimum stop
             Ssl_pips = current_price + sl_pips * get_pip(symbol)
-            Stp_pips = current_price - 3.0 * atr.iloc[-2] * get_pip(symbol)
+            Stp_pips = current_price - 4.0 * atr.iloc[-2] * get_pip(symbol)
             stop_loss_pips1 = (Ssl_pips - current_price)/get_pip(symbol)
-            pos_size1 = get_pos_size2(symbol, 15, stop_loss_pips1)
-            place_bracket_order(symbol, pos_size1, signal, Ssl_pips, Stp_pips)
+            pos_size1 = get_pos_size2(symbol, 25, stop_loss_pips1)
+            result = place_bracket_order(symbol, pos_size1, signal, Ssl_pips, Stp_pips)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 order = mt5.orders_get(ticket=result.order)[0]
                 weekly_trades.append({
@@ -483,9 +616,11 @@ def main(symbol):
                     'pnl': None,
                     'close_type': None
                 })
-            # ... (rest of sell logic)
-            print("{}: New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
-            send_email("{}: New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
+                # ... (rest of sell logic)
+                print("{}:(RSI_Short_Time_Execution) New {} position initiated for {}".format(dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), signal, symbol))
+                send_email("{}:(RSI_Short_Time_Execution) New {} position initiated for {}".format(dt.datetime.now(), signal, symbol))
+            else:
+                print(f"Order failed for {symbol}")
 
         # Order execution logic
         elif signal == "Close":
@@ -575,13 +710,13 @@ def market_is_closed(tz):
     if now.weekday() >= 5:
         return True
     
-    # Holiday check (example: Christmas Day)
-    if now.month == 12 and now.day == 25:
-        return True
+    # # Holiday check (example: Christmas Day)
+    # if now.month == 12 and now.day == 25:
+    #     return True
     
     # Session hours check (e.g., FX market closed 21:00-21:15 daily)
-    if dt.time(21, 0) <= now.time() < dt.time(21, 15):
-        return True
+    # if dt.time(21, 0) <= now.time() < dt.time(21, 15):
+    #     return True
     
     return False
 
@@ -620,9 +755,11 @@ def close_all_positions():
         report_path = generate_weekly_report()
         if report_path:
             send_email("Weekly Trade Report", attachments=[report_path])
+            send_email2("Weekly Trade Report", attachments=[report_path])
             os.remove(report_path)  # Clean up file after sending
             
         send_email(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
+        send_email2(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
         weekly_trades = []
     else:
         print("No positions to close")
@@ -632,9 +769,11 @@ def close_all_positions():
         report_path = generate_weekly_report()
         if report_path:
             send_email("Weekly Trade Report", attachments=[report_path])
+            send_email2("Weekly Trade Report", attachments=[report_path])
             os.remove(report_path)  # Clean up file after sending
             
         send_email(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
+        send_email2(f"This week cumulative P&L: {sum([t['pnl'] for t in weekly_trades if t['pnl'] is not None])}")
         weekly_trades = []
 
 def calculate_sleep_duration(tz):
@@ -642,14 +781,14 @@ def calculate_sleep_duration(tz):
     now = datetime.now(tz)
     
     # 1. Daily maintenance break (21:00-21:15)
-    if dt.time(21, 0) <= now.time() < dt.time(21, 15):
-        next_open = now.replace(hour=21, minute=15, second=0, microsecond=0)
-        return max((next_open - now).total_seconds(), 0)
+    # if dt.time(21, 0) <= now.time() < dt.time(21, 15):
+    #     next_open = now.replace(hour=21, minute=15, second=0, microsecond=0)
+    #     return max((next_open - now).total_seconds(), 0)
     
-    # 2. Christmas holiday
-    if now.month == 12 and now.day == 25:
-        next_day = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
-        return max((next_day - now).total_seconds(), 0)
+    # # 2. Christmas holiday
+    # if now.month == 12 and now.day == 25:
+    #     next_day = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+    #     return max((next_day - now).total_seconds(), 0)
     
     # 3. Weekend closure
     if now.weekday() >= 5:  # Saturday or Sunday
@@ -690,7 +829,7 @@ if __name__ == "__main__":
             
             for symbol in symbols:
                 pt = params.loc[params.Symbol==symbol,"passthrough"].to_list()[0]
-                tf = params.loc[params.Symbol==symbol,"backtest_timeframe15M"].to_list()[0]
+                tf = params.loc[params.Symbol==symbol,"backtest_timeframe5M"].to_list()[0]
                 
                 # CHANGED LINE: Use current_time instead of time.time() in calculations
                 elapsed_since_start = current_time - starttime  
@@ -722,8 +861,25 @@ if __name__ == "__main__":
                 
             
             # CHANGED LINE 2: Align sleep to wall-clock 15-minute marks
-            time.sleep(900 - (current_time % 900))  # Exact 15-minute alignment
+            time.sleep(240 - (current_time % 240))  # Exact 15-minute alignment
 
         except KeyboardInterrupt:
             print('\n\nKeyboard exception received. Exiting.')
             exit()
+
+# SAR Trailing Stop Update
+                # ticket = open_pos_cur.iloc[0].ticket
+                # current_sl = open_pos_cur.iloc[0].sl
+                # if (position_type == "long" and current_sar > current_sl) or \
+                #     (position_type == "short" and current_sar < current_sl):
+                #     new_sl = current_sar
+                #     request = {
+                #         "action": mt5.TRADE_ACTION_SLTP,
+                #         "symbol": symbol,
+                #         "sl": new_sl,
+                #         "tp": open_pos_cur.iloc[0].tp,
+                #         "ticket": ticket
+                #     }
+                #     mt5.order_send(request)
+                #     print(f"Updated SL to SAR value: {new_sl}")
+                #     send_email(f"SAR Trailing Stop Update: {symbol} SL moved to {new_sl}")

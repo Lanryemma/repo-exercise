@@ -20,8 +20,9 @@ print("MetaTrader5 package version: ",mt5.__version__)
 
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\keyfusionmarket.txt"
+#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\keyfusionmarket.txt"
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\KeyIC_market1.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -102,6 +103,48 @@ def RSI(DF, n=9):
     df["rsi"] = 100 - (100/ (1 + df["rs"]))
     return df["rsi"]
 
+def RSI2(DF, n=50):
+    "function to calculate RSI"
+    df = DF.copy()
+    df["change"] = df["close"] - df["close"].shift(1)
+    df["gain"] = np.where(df["change"]>=0, df["change"], 0)
+    df["loss"] = np.where(df["change"]<0, -1*df["change"], 0)
+    df["avgGain"] = RMA(df["gain"],n)
+    df["avgLoss"] = RMA(df["loss"],n)
+    df["rs"] = df["avgGain"]/df["avgLoss"]
+    df["rsi"] = 100 - (100/ (1 + df["rs"]))
+    return df["rsi"]
+
+def laguerre_rsi(data1, alpha=0.2):
+    """
+    Calculates Laguerre RSI indicator
+    :param data: Pandas Series of closing prices
+    :param alpha: Smoothing factor (0.2 by default)
+    :return: Pandas Series with Laguerre RSI values
+    """
+    data2 = data1.copy()
+    data = data2['close']
+    gamma = 1 - alpha
+    L0, L1, L2, L3 = [np.zeros(len(data)) for _ in range(4)]
+    
+    # Initialize first values
+    L0[0] = L1[0] = L2[0] = L3[0] = data.iloc[0]
+    
+    # Calculate Laguerre filters
+    for i in range(1, len(data)):
+        L0[i] = alpha * data.iloc[i] + gamma * L0[i-1]
+        L1[i] = -gamma * L0[i] + L0[i-1] + gamma * L1[i-1]
+        L2[i] = -gamma * L1[i] + L1[i-1] + gamma * L2[i-1]
+        L3[i] = -gamma * L2[i] + L2[i-1] + gamma * L3[i-1]
+    
+    # Calculate momentum components
+    cu = np.maximum(0, L0-L1) + np.maximum(0, L1-L2) + np.maximum(0, L2-L3)
+    cd = np.maximum(0, L1-L0) + np.maximum(0, L2-L1) + np.maximum(0, L3-L2)
+    
+    # Avoid division by zero
+    temp = np.where(cu + cd == 0, 1e-10, cu + cd)
+    data2['LG_RSI'] = 100 * (cu / temp)
+    return data2['LG_RSI']
 #_____________________________________________________________________________________________________________________________________________________
 #STOPLOSS/ TAKE PROFIT AND TRAILING SL/TP
 def calculate_volatility(DF, length, mult):
@@ -132,7 +175,7 @@ def calculate_adaptive_sl_tp(df, symbol, risk_reward_ratio=2):
     df['tp_pips'] = df['atr_pips'] * tp_mult
     return df
 
-def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
+def parabolic_sar1(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
         df = df.copy()
         high = df['high'].values
         low = df['low'].values
@@ -177,6 +220,59 @@ def parabolic_sar(df, step=0.02, max_step=0.2):#(df, step=0.035, max_step=0.28)
             df['sar'] = sar
         return df['sar']
         
+
+def parabolic_sar(df, step=0.02, max_step=0.2):
+    df = df.copy()
+    high = df['high'].values
+    low = df['low'].values
+    sar = np.full(len(df), np.nan)
+    trend = 1  # 1 = bullish, -1 = bearish
+    
+    # Correct initial EP: high[0] for bullish, low[0] for bearish
+    ep = high[0] if trend == 1 else low[0]
+    af = step
+    
+    # Initial SAR (first value)
+    sar[0] = low[0] if trend == 1 else high[0]
+    
+    for i in range(1, len(df)):
+        # Calculate interim SAR
+        sar[i] = sar[i-1] + af * (ep - sar[i-1])
+        
+        if trend == 1:
+            # Update EP FIRST (even if reversal happens)
+            if high[i] > ep:
+                ep = high[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if low[i] < sar[i]:
+                trend = -1
+                sar[i] = ep  # Set to prior bullish EP, not current high!
+                ep = low[i]  # New bearish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = min(sar[i], low[i-1], low[max(0, i-2)])
+        else:
+            # Update EP FIRST
+            if low[i] < ep:
+                ep = low[i]
+                af = min(af + step, max_step)
+            
+            # Check reversal
+            if high[i] > sar[i]:
+                trend = 1
+                sar[i] = ep  # Set to prior bearish EP, not current low!
+                ep = high[i]  # New bullish EP
+                af = step
+            else:
+                # Non-reversal adjustment
+                sar[i] = max(sar[i], high[i-1], high[max(0, i-2)])
+
+    return pd.Series(sar, index=df.index)
+
+
 
 # Add these near your other utility functions
 def get_pip_value1(symbol, lot_size=100000):
@@ -330,7 +426,7 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURJPY"
+    symbol = "EURUSD"
     timeframe = "TIMEFRAME_M5"
     num_candles = 34560 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
@@ -344,9 +440,11 @@ if __name__ == "__main__":
     data = data.dropna().copy()
     data["sma"] = SMA(data)       
     data["rsi"] = RSI(data)
+    data["rsi2"] = RSI2(data)
+    data['LG_RSI'] = laguerre_rsi(data, alpha=0.5)
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
-    data['sar'] = parabolic_sar(data, step=0.007, max_step=0.2)
+    data['sar'] = parabolic_sar(data, step=0.02, max_step=0.25)
     data.dropna(inplace=True)
 
     data = data.tz_convert('Africa/Lagos') 
@@ -372,6 +470,8 @@ if __name__ == "__main__":
     hi_index = data.columns.to_list().index("high")
     lo_index = data.columns.to_list().index("low")
     rsi_index = data.columns.to_list().index("rsi")
+    rsi2_index = data.columns.to_list().index("rsi2")
+    Lrsi2_index = data.columns.to_list().index("LG_RSI")
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
@@ -394,13 +494,14 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i,rsi_index] > 20) & \
-                (data.iloc[i-1,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
+            if ((data.iloc[i,Lrsi2_index] < 80) & \
+                (data.iloc[i-1,Lrsi2_index] > 80) & (data.iloc[i,rsi2_index] > 50) #& \
+                    #(data.iloc[i-2,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
@@ -434,12 +535,13 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i,rsi_index] < 80) & \
-                (data.iloc[i-1,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
+            if ((data.iloc[i,Lrsi2_index] > 20) & \
+                (data.iloc[i-1,Lrsi2_index] < 20) &(data.iloc[i,rsi2_index] < 50)#& \
+                #(data.iloc[i-2,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    sl_pips = 1.0 * atr  # 1.5x ATR
                     tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
