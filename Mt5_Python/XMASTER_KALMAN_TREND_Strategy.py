@@ -474,9 +474,9 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
-    timeframe = "TIMEFRAME_M15"
-    num_candles = 11520 #3840
+    symbol = "BTCUSD"
+    timeframe = "TIMEFRAME_M1"
+    num_candles = 69560 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
     RISK_PER_TRADE = 5  # $10 risk per trade
@@ -504,13 +504,13 @@ if __name__ == "__main__":
     
     
     #result1 = calculate_components(data, ema_period=26, atr_period=26, atr_multiplier=1.0)  # 80 bars ≈ 20 hours
-    #result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
-    result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
+    result3 = calculate_components(data, ema_period=20, atr_period=14, atr_multiplier=1.5)# for 5 minutes
+    #result3 = calculate_components(data, ema_period=18, atr_period=12, atr_multiplier=1.8)# for 15 minutes
     #result3 = calculate_components(data, ema_period=30, atr_period=20, atr_multiplier=1.8)# for 30 minutes
     #result1 = calculate_components(data, ema_period=50, atr_period=26, atr_multiplier=2.0)# for 1 hour
     
     result1 = calculate_signals(data, short_len=48, long_len=144) 
-    result2 = calculate_xmaster_signals(data, short_ema=12, long_ema=48) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
+    result2 = calculate_xmaster_signals(data, short_ema=10, long_ema=38) #for M1-M5 (short_ema=10, long_ema=38) | for M15-H1 (short_ema=12, long_ema=48) |
     result4 = generate_mdx_signals(result3)
     data['volatility'] = calculate_volatility(data, 34, 2.4)
         #print(data['volatility'].tail(20))
@@ -519,6 +519,7 @@ if __name__ == "__main__":
     dynamic_step = max(0.01, min(0.025, 0.018 * atr_ratio))
 
     data['sar'] = parabolic_sar(data, step=0.02, max_step=0.25)
+    data['prev_sar'] = data['sar'].shift(1)  # Use yesterday's PSAR today
     # 1. Convert to proper timezone-aware index
     data = data.tz_convert('Africa/Lagos') 
     # 2. Add session flags directly (no separate function needed)
@@ -592,8 +593,8 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ( (data.iloc[i]['signal1']==1) &(data.iloc[i]['signal2']==1) &(data.iloc[i]['signal3']==1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
+            if ( (data.iloc[i]['signal1']==1) &(data.iloc[i]['signal2']==-1) &(data.iloc[i]['signal3']==1) #&\
+                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
                 #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
@@ -633,8 +634,8 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i]['signal1']==-1) &(data.iloc[i]['signal2']==-1) &(data.iloc[i]['signal3']==-1) &\
-                (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
+            if ((data.iloc[i]['signal1']==-1) &(data.iloc[i]['signal2']==1) &(data.iloc[i]['signal3']==-1) #&\
+                #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) #(data.iloc[i]['signal3']==1)&\
                 #(data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'] )#| data.iloc[i]['Tokyo_active']) #& (data.iloc[i]['signal3']==1)  #& (data.iloc[i]['newyork_active'] |data.iloc[i]['london_active'])# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
@@ -673,8 +674,8 @@ if __name__ == "__main__":
                             
         
         elif signal == "long":
-            current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96 #12 * 6  # 4 hours for M15
+            current_sar = data.iloc[i]['prev_sar']
+            max_hold_bars = 96*3 #12 * 6  # 4 hours for M15
             
         # Update SL to SAR if it's tighter
             #check if the MACD based signal reversed which would imply exiting position even though SL may not have reached
@@ -691,6 +692,9 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif current_sar > trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
+            # elif current_sar > trade_stats[-1]["open_price"]:  # Only if above entry
+            #     if current_sar > trade_stats[-1]["sl_price"]:  # Only if tighter
+            #         trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
@@ -698,8 +702,8 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
                 
         elif signal == "short":
-            current_sar = data.iloc[i]['sar']
-            max_hold_bars = 96#12 * 6  # 4 hours for M15
+            current_sar = data.iloc[i]['prev_sar']
+            max_hold_bars = 96*3#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
                 signal = None
@@ -713,6 +717,9 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
+            # elif current_sar < trade_stats[-1]["open_price"]:  # Only if above entry
+            #     if current_sar < trade_stats[-1]["sl_price"]:  # Only if tighter
+            #         trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 

@@ -6,7 +6,7 @@ import datetime as dt
 import pytz
 import matplotlib.pyplot as plot
 from pandas import Series
-#from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
+from Stratergy_evaluation import win_rate,mean_ret_winner_pip,mean_ret_loser_pip,max_drawdown
 
 
 # display data on the MetaTrader 5 package
@@ -20,9 +20,9 @@ print("MetaTrader5 package version: ",mt5.__version__)
 
 #an easier way to establish connection is buy reading the login details from another file
 #"os.chdir"--- to change file directory
-#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\keyfusionmarket.txt"
+file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\keyfusionmarket.txt"
 #file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\key.txt"
-file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\KeyIC_market1.txt"
+#file_path = "C:\\Users\\user\Documents\\LANRE\Desktop\\FRONTEND\\Mt5_Python\\KeyIC_market1.txt"
 key = open(file_path,"r").read().split()
 path1 = "C:\\Users\\user\\AppData\\Roaming\\MetaTrader 5\\terminal64.exe"#For the executable path when we run the code
 
@@ -103,7 +103,7 @@ def RSI(DF, n=9):
     df["rsi"] = 100 - (100/ (1 + df["rs"]))
     return df["rsi"]
 
-def RSI2(DF, n=50):
+def RSI2(DF, n=100):
     "function to calculate RSI"
     df = DF.copy()
     df["change"] = df["close"] - df["close"].shift(1)
@@ -227,13 +227,21 @@ def parabolic_sar(df, step=0.02, max_step=0.2):
     low = df['low'].values
     sar = np.full(len(df), np.nan)
     trend = 1  # 1 = bullish, -1 = bearish
+    if df['close'].iloc[0] > df['open'].iloc[0]:
+        trend = 1
+        sar[0] = df['low'].iloc[0]
+        ep = df['high'].iloc[0]
+    else:
+        trend = -1
+        sar[0] = df['high'].iloc[0]
+        ep = df['low'].iloc[0]
     
     # Correct initial EP: high[0] for bullish, low[0] for bearish
-    ep = high[0] if trend == 1 else low[0]
+    #ep = high[0] if trend == 1 else low[0]
     af = step
     
     # Initial SAR (first value)
-    sar[0] = low[0] if trend == 1 else high[0]
+    #sar[0] = low[0] if trend == 1 else high[0]
     
     for i in range(1, len(df)):
         # Calculate interim SAR
@@ -426,12 +434,12 @@ if __name__ == "__main__":
     #THE STRATEGY IS NOT GOOD FOR USDCAD you can only use (signal1 + signal3) to get good win-rate for USDCAD
     #THE STRATEGY IS NOT GOOD FOR EURGBP you can only use (signal1 + signal3) to get good win-rate for EURGBP
     #THE STRATEGY IS NOT GOOD FOR GBPMXN you can only use (signal1 + signal3) to get good win-rate for GBPMXN
-    symbol = "EURUSD"
-    timeframe = "TIMEFRAME_M5"
-    num_candles = 34560 #3840
+    symbol = "GBPUSD"
+    timeframe = "TIMEFRAME_M1"
+    num_candles = 69560 #3840
     data =  get_hist_data(symbol, timeframe,num_candles, time_till=None )
     
-    RISK_PER_TRADE = 10  # $10 risk per trade
+    RISK_PER_TRADE = 5  # $10 risk per trade
     
     COMMISSION = 0.1     # $0 if no commission
 
@@ -442,9 +450,12 @@ if __name__ == "__main__":
     data["rsi"] = RSI(data)
     data["rsi2"] = RSI2(data)
     data['LG_RSI'] = laguerre_rsi(data, alpha=0.5)
+    data['LG_RSI2'] = laguerre_rsi(data, alpha=0.01)
     data['volatility'] = calculate_volatility(data, 38, 2.4)
     #print(data['volatility'].tail(20))
     data['sar'] = parabolic_sar(data, step=0.02, max_step=0.25)
+    # After calculating PSAR, create a shifted version
+    data['prev_sar'] = data['sar'].shift(1)  # Use yesterday's PSAR today
     data.dropna(inplace=True)
 
     data = data.tz_convert('Africa/Lagos') 
@@ -472,6 +483,7 @@ if __name__ == "__main__":
     rsi_index = data.columns.to_list().index("rsi")
     rsi2_index = data.columns.to_list().index("rsi2")
     Lrsi2_index = data.columns.to_list().index("LG_RSI")
+    LLrsi2_index = data.columns.to_list().index("LG_RSI2")
     returns_index = data.columns.to_list().index("returns")
     
     for i in range(len(data)-1):
@@ -494,15 +506,16 @@ if __name__ == "__main__":
         
         if signal == None:
             
-            if ((data.iloc[i,Lrsi2_index] < 80) & \
-                (data.iloc[i-1,Lrsi2_index] > 80) & (data.iloc[i,rsi2_index] > 50) #& \
+            if ((data.iloc[i,Lrsi2_index] < 20) & \
+                (data.iloc[i-1,Lrsi2_index] > 20) & (data.iloc[i,LLrsi2_index] > 50) #& (data.iloc[i]['london_active'] | data.iloc[i]['newyork_active'])#| data.iloc[i]['sydney_active'])
+                #& (data.iloc[i]['Tokyo_active'] )
                     #(data.iloc[i-2,rsi_index] < 20)# | data.iloc[i]['Tokyo_active']) 
                 #data.iloc[i]['buy_signal3'] and data.iloc[i]['color']=="green" #signals.iloc[i]['buy']      # STC above 25 = bullish momentum  &(data.iloc[i]['close'] > data.iloc[i]['open']) 
                 ):
                     
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
-                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    tp_pips = 4.5 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -535,14 +548,14 @@ if __name__ == "__main__":
                                         "fees_paid": SPREAD_COST1 + (COMMISSION * 2)})
                     
             
-            if ((data.iloc[i,Lrsi2_index] > 20) & \
-                (data.iloc[i-1,Lrsi2_index] < 20) &(data.iloc[i,rsi2_index] < 50)#& \
+            if ((data.iloc[i,Lrsi2_index] > 80) & \
+                (data.iloc[i-1,Lrsi2_index] < 80) &(data.iloc[i,LLrsi2_index] < 50) #& (data.iloc[i]['london_active']| data.iloc[i]['newyork_active'])#| data.iloc[i]['sydney_active'])
                 #(data.iloc[i-2,rsi_index] > 80)# | data.iloc[i]['Tokyo_active'])
                 #data.iloc[i]['sell_signal3'] and data.iloc[i]['color']=="red"  #signals.iloc[i]['sell']     # STC below 75 = bullish momentum  & (data.iloc[i]['close'] < data.iloc[i]['open']) 
                     ):
                     atr = data.iloc[i]['volatility'] / get_pip(symbol)  # ATR in pips
-                    sl_pips = 1.0 * atr  # 1.5x ATR
-                    tp_pips = 4.0 * atr  # 3x ATR (2:1 reward:risk)
+                    sl_pips = 1.5 * atr  # 1.5x ATR
+                    tp_pips = 4.5 * atr  # 3x ATR (2:1 reward:risk)
                     # atr = data.iloc[i]['volatility'] / get_pip(symbol)
                     # volatility_ratio = atr / data['volatility'].mean()  # Relative volatility
                     # # Scale ratios inversely with volatility
@@ -575,7 +588,8 @@ if __name__ == "__main__":
                             
         
         elif signal == "long":
-            current_sar = data.iloc[i]['sar']
+            #current_sar = data.iloc[i]['sar']
+            current_sar = data.iloc[i]['prev_sar']
             max_hold_bars = 96*3 #12 * 6  # 4 hours for M15
             
         # Update SL to SAR if it's tighter
@@ -593,6 +607,9 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif current_sar > trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
+            # elif current_sar > trade_stats[-1]["open_price"]:  # Only if above entry
+            #     if current_sar > trade_stats[-1]["sl_price"]:  # Only if tighter
+            #         trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
@@ -600,7 +617,8 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
                 
         elif signal == "short":
-            current_sar = data.iloc[i]['sar']
+            #current_sar = data.iloc[i]['sar']
+            current_sar = data.iloc[i]['prev_sar']
             max_hold_bars = 96*3#12 * 6  # 4 hours for M15
             #candle_data.iloc[i,-1] = (candle_data.iloc[i,op_index] - trade_stats[-1]["close_price"])/get_pip(symbol) 
             if data.iloc[i,lo_index] < trade_stats[-1]["tp_price"]: 
@@ -615,6 +633,9 @@ if __name__ == "__main__":
                 data.iloc[i,returns_index] = calculate_trade_pnl(trade_stats[-1]) 
             elif current_sar < trade_stats[-1]["sl_price"]:
                 trade_stats[-1]["sl_price"] = current_sar
+            # elif current_sar < trade_stats[-1]["open_price"]:  # Only if above entry
+            #     if current_sar < trade_stats[-1]["sl_price"]:  # Only if tighter
+            #         trade_stats[-1]["sl_price"] = current_sar
             elif (i - trade_stats[-1]["entry_bar"]) >= max_hold_bars:
                 signal = None
                 trade_stats[-1]["close_price"] =  data.iloc[i,cp_index ] 
@@ -684,18 +705,18 @@ if __name__ == "__main__":
     total_fees = sum(trade['fees_paid'] for trade in trade_stats)
     print(f"Commission & Spread Costs: ${total_fees:.2f}")
     print("Number of trades taken:", len(trade_stats))
-    retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
-    print(retun)
+    # retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
+    # print(retun)
     # Modify your equity curve plotting:
     cumulative_pnl = [calculate_trade_pnl(trade) for trade in trade_stats if trade['close_price'] is not None]
     cumulative_series = pd.Series(cumulative_pnl).cumsum()
     cumulative_series.plot(title=f"Equity Curve (Risk per Trade: ${RISK_PER_TRADE})")
     plot.ylabel("Dollar P&L")
     plot.show()
-    """
+    
     #print backtesting results
-    retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
-    print(retun)
+    # retun = data['returns'][(data['returns'] > 0) | (data['returns'] < 0)].to_list()
+    # print(retun)
     print("cumulative return in pips = ",data["returns"].cumsum().iloc[-1])
     print("win rate of the strategy = {:.2f}%".format(win_rate(trade_stats)))
     print("average pip return per winning trade = {:.2f}".format(mean_ret_winner_pip(trade_stats, symbol)))
@@ -708,4 +729,4 @@ if __name__ == "__main__":
     #plot equity curve in terms of pip
     data["returns"].cumsum().plot()
     plot.show()
-    """
+    

@@ -210,7 +210,7 @@ def parabolic_sar(df, step=0.02, max_step=0.2):
 #______________________________________________________________________________________________________________________________________________________________
 #THE CODE WE ARE GOING TO USE FOR THE STRATEGY BACK-TESTING
 
-symbol = "GBPMXN"
+symbol = "GBPUSD"
 backtest_timeframe = "TIMEFRAME_M5"
 candle_data = get_hist_data(symbol,backtest_timeframe,num_candles=69120,time_till=None)
 
@@ -290,8 +290,8 @@ for i in range(3,len(candle_data)-1):
             signal = None
             trade_stats[-1]["close_price"] =   trade_stats[-1]["sl_price"] 
             candle_data.iloc[i,returns_index] = (trade_stats[-1]["close_price"]- trade_stats[-1]["open_price"])/get_pip(symbol)
-        elif current_sar > trade_stats[-1]["sl_price"]:
-            trade_stats[-1]["sl_price"] = current_sar
+        # elif current_sar > trade_stats[-1]["sl_price"]:
+        #     trade_stats[-1]["sl_price"] = current_sar
         # elif candle_data.iloc[i,hi_index] > (trade_stats[-1]["open_price"] + 45*get_pip(symbol)):
         #     trade_stats[-1]["sl_price"] = trade_stats[-1]["open_price"]
             
@@ -314,8 +314,8 @@ for i in range(3,len(candle_data)-1):
             candle_data.iloc[i,returns_index] = (trade_stats[-1]["open_price"]- trade_stats[-1]["close_price"])/get_pip(symbol)
         # elif candle_data.iloc[i,lo_index] < (trade_stats[-1]["open_price"] - 45*get_pip(symbol)):
         #     trade_stats[-1]["sl_price"] = trade_stats[-1]["open_price"]
-        elif current_sar < trade_stats[-1]["sl_price"]:
-            trade_stats[-1]["sl_price"] = current_sar
+        # elif current_sar < trade_stats[-1]["sl_price"]:
+        #     trade_stats[-1]["sl_price"] = current_sar
     # if symbol == "USDSEK": 
     #     candle_data.iloc[i,-1] = candle_data.iloc[i,-1]/5 #adjust for pos size of USDSEK            
 if trade_stats and trade_stats[-1]["close_price"] == None:
