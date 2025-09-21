@@ -8,7 +8,7 @@ from keras.losses import MeanSquaredError, BinaryCrossentropy
 from keras.activations import sigmoid
 from lab_coffee_utils import load_coffee_data, plt_roast, plt_prob, plt_layer, plt_network, plt_output_unit
 
-#myvenv\Scripts\activate
+#.venv\Scripts\activate
 # Press Ctrl+Shift+P
 
 # Type "Python: Select Interpreter"
