@@ -3,6 +3,7 @@ import datetime as dt
 import pytz
 import matplotlib.pyplot as plt
 import math
+
 # x_train is the input variable (size in 1000 square feet)
 # y_train is the target (price in 1000s of dollars)
 x_train = np.array([1.0, 2.0])
