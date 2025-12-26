@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 #plt.style.use('./deeplearning.mplstyle')
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense,Input
 from sklearn.datasets import make_blobs
 
 
@@ -26,6 +26,7 @@ X_train, y_train = make_blobs(n_samples=2000, centers=centers, cluster_std=1.0,r
 
 model = Sequential(
     [ 
+        #Input(shape=X_train),
         Dense(25, activation = 'relu'),
         Dense(15, activation = 'relu'),
         Dense(4, activation = 'softmax')    # < softmax activation here
